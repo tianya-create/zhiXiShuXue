@@ -89,9 +89,24 @@ var request = {
   },
   
   // 上传文件
-  upload: function(url, file, onProgress) {
+  upload: function(url, file, data, onProgress) {
     var formData = new FormData()
     formData.append('file', file)
+
+    if (typeof data === 'function') {
+      onProgress = data
+      data = null
+    }
+
+    if (data) {
+      var keys = Object.keys(data)
+      for (var i = 0; i < keys.length; i++) {
+        var key = keys[i]
+        if (data[key] !== undefined && data[key] !== null) {
+          formData.append(key, data[key])
+        }
+      }
+    }
     
     return api.post(url, formData, {
       headers: {

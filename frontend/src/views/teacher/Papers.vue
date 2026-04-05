@@ -131,6 +131,18 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/utils/api'
 import dayjs from 'dayjs'
 
+function getFilePreviewUrl(filePath) {
+  if (!filePath) return ''
+  if (/^https?:\/\//i.test(filePath)) return filePath
+
+  var origin = window.location.origin
+  if (origin.indexOf(':5000') !== -1) {
+    origin = origin.replace(':5000', ':5001')
+  }
+
+  return origin + filePath
+}
+
 var loading = ref(false)
 var papers = ref([])
 var pagination = reactive({
@@ -253,8 +265,10 @@ function deletePaper(row) {
 }
 
 function viewPaper(row) {
-  if (row.filePath) {
-    window.open(row.filePath, '_blank')
+  var previewUrl = getFilePreviewUrl(row.filePath)
+
+  if (previewUrl) {
+    window.open(previewUrl, '_blank')
   }
 }
 

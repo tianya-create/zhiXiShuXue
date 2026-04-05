@@ -16,12 +16,21 @@
           <el-tag>{{ question.difficulty }}</el-tag>
         </div>
         <div class="question-content">{{ question.content }}</div>
+
         <div v-if="question.type === 'choice'" class="question-options">
           <el-radio-group v-model="answers[question.id]">
             <el-radio v-for="(opt, i) in question.options" :key="i" :label="String.fromCharCode(65 + i)">
               {{ String.fromCharCode(65 + i) }}. {{ opt }}
             </el-radio>
           </el-radio-group>
+        </div>
+
+        <div v-else-if="question.type === 'fill'">
+          <el-input v-model="answers[question.id]" placeholder="请输入答案" />
+        </div>
+
+        <div v-else>
+          <el-input v-model="answers[question.id]" type="textarea" :rows="4" placeholder="请输入答案" />
         </div>
       </div>
       
@@ -41,13 +50,20 @@ var answers = reactive({})
 
 onMounted(function() {
   var kpId = route.query.kpId
-  if (kpId) {
+  var questionId = route.query.questionId
+  if (questionId) {
+    loadPractice(kpId || 'custom', questionId)
+  } else if (kpId) {
     loadPractice(kpId)
   }
 })
 
-function loadPractice(kpId) {
-  api.get('/student/practice/' + kpId)
+function loadPractice(kpId, questionId) {
+  var url = '/student/practice/' + kpId
+  if (questionId) {
+    url += '?questionId=' + questionId
+  }
+  api.get(url)
     .then(function(res) {
       if (res.success) {
         questions.value = res.data

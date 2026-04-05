@@ -5,6 +5,62 @@ const path = require('path');
 const fs = require('fs');
 const db = require('../database/memory-db');
 
+function normalizeUploadedFileName(fileName) {
+  if (!fileName) return '';
+
+  if (!/[\x80-\xFF]/.test(fileName)) {
+    return fileName;
+  }
+
+  try {
+    return Buffer.from(fileName, 'latin1').toString('utf8');
+  } catch (error) {
+    return fileName;
+  }
+}
+
+function getTeacherByUserId(userId) {
+  return db.findById('teachers', userId) || db.findOne('teachers', { userId });
+}
+
+function buildAnswerDetail(answer) {
+  const paper = db.findById('papers', answer.paperId);
+  const assignment = db.findById('assignments', answer.assignmentId);
+  const student = db.findById('students', answer.studentId) || db.findOne('students', { userId: answer.studentId });
+
+  const questionResults = (answer.questionResults || []).map(item => {
+    const question = db.findById('questions', item.questionId) || {};
+    const manualScore = answer.scores && answer.scores[item.questionId] !== undefined
+      ? answer.scores[item.questionId]
+      : item.score;
+
+    return {
+      questionId: item.questionId,
+      questionType: question.type,
+      content: question.content,
+      options: question.options || [],
+      standardAnswer: question.answer,
+      studentAnswer: item.answer,
+      correct: item.correct,
+      score: manualScore || 0,
+      fullScore: question.score || 0,
+      knowledgePoints: question.knowledgePoints || []
+    };
+  });
+
+  return {
+    answer: {
+      ...answer,
+      questionResults,
+      totalScore: answer.totalScore || 0
+    },
+    assignment,
+    paper,
+    student,
+    questionResults
+  };
+}
+
 // 配置文件上传
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -16,7 +72,8 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+    const originalName = normalizeUploadedFileName(file.originalname);
+    cb(null, uniqueSuffix + path.extname(originalName));
   }
 });
 
@@ -268,15 +325,17 @@ router.post('/papers/upload', upload.single('file'), (req, res) => {
     if (!req.file) {
       return res.status(400).json({ success: false, message: '请上传文件' });
     }
+
+    const originalName = normalizeUploadedFileName(req.file.originalname);
     
     const paper = db.create('papers', {
-      title: title || req.file.originalname,
+      title: title || originalName,
       teacherId,
       classId,
       filePath: `/uploads/papers/${req.file.filename}`,
-      fileName: req.file.originalname,
+      fileName: originalName,
       fileSize: req.file.size,
-      fileType: path.extname(req.file.originalname),
+      fileType: path.extname(originalName),
       status: 'pending', // pending, processing, completed
       questions: []
     });
@@ -339,7 +398,8 @@ router.delete('/papers/:id', (req, res) => {
     
     // 删除文件
     if (paper.filePath) {
-      const filePath = path.join(__dirname, '..', paper.filePath);
+      const relativePath = paper.filePath.replace(/^\//, '');
+      const filePath = path.join(__dirname, '..', relativePath);
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
@@ -472,9 +532,14 @@ router.post('/assignments', (req, res) => {
 router.get('/assignments', (req, res) => {
   try {
     const teacherId = req.headers['x-user-id'];
+    const teacher = getTeacherByUserId(teacherId);
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: '教师不存在' });
+    }
+
     const { classId, status } = req.query;
     
-    let assignments = db.find('assignments', { teacherId });
+    let assignments = db.find('assignments', { teacherId: teacher.id });
     
     if (classId) {
       assignments = assignments.filter(a => a.classId === classId);
@@ -482,8 +547,79 @@ router.get('/assignments', (req, res) => {
     if (status) {
       assignments = assignments.filter(a => a.status === status);
     }
+
+    const result = assignments.map(assignment => {
+      const paper = db.findById('papers', assignment.paperId);
+      const classInfo = db.findById('classes', assignment.classId);
+      const answerCount = db.find('answers').filter(a => a.assignmentId === assignment.id).length;
+
+      return {
+        ...assignment,
+        paperTitle: paper ? paper.title : '',
+        className: classInfo ? classInfo.name : '',
+        answerCount
+      };
+    });
     
-    res.json({ success: true, data: assignments });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 获取作业详情
+router.get('/assignments/:id', (req, res) => {
+  try {
+    const teacherId = req.headers['x-user-id'];
+    const teacher = getTeacherByUserId(teacherId);
+    const { id } = req.params;
+
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: '教师不存在' });
+    }
+
+    const assignment = db.findById('assignments', id);
+    if (!assignment || assignment.teacherId !== teacher.id) {
+      return res.status(404).json({ success: false, message: '作业不存在' });
+    }
+
+    const paper = db.findById('papers', assignment.paperId);
+    const classInfo = db.findById('classes', assignment.classId);
+
+    res.json({
+      success: true,
+      data: {
+        ...assignment,
+        paper,
+        classInfo,
+        answers: db.find('answers').filter(a => a.assignmentId === assignment.id)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 删除作业
+router.delete('/assignments/:id', (req, res) => {
+  try {
+    const teacherId = req.headers['x-user-id'];
+    const teacher = getTeacherByUserId(teacherId);
+    const { id } = req.params;
+
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: '教师不存在' });
+    }
+
+    const assignment = db.findById('assignments', id);
+    if (!assignment || assignment.teacherId !== teacher.id) {
+      return res.status(404).json({ success: false, message: '作业不存在' });
+    }
+
+    db.delete('answers', { assignmentId: id });
+    db.deleteById('assignments', id);
+
+    res.json({ success: true, message: '作业删除成功' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -507,8 +643,34 @@ router.get('/answers', (req, res) => {
     if (studentId) {
       answers = answers.filter(a => a.studentId === studentId);
     }
+
+    const result = answers.map(answer => {
+      const assignment = db.findById('assignments', answer.assignmentId);
+      const student = db.findById('students', answer.studentId) || db.findOne('students', { userId: answer.studentId });
+      return {
+        ...answer,
+        assignmentTitle: assignment ? assignment.title : '未知作业',
+        studentName: student ? student.name : '未知学生'
+      };
+    });
     
-    res.json({ success: true, data: answers });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 获取答题详情
+router.get('/answers/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const answer = db.findById('answers', id);
+
+    if (!answer) {
+      return res.status(404).json({ success: false, message: '答题记录不存在' });
+    }
+
+    res.json({ success: true, data: buildAnswerDetail(answer) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

@@ -1,6 +1,41 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const XLSX = require('xlsx');
+const bcrypt = require('bcryptjs');
 const db = require('../database/memory-db');
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
+
+function normalizeText(value) {
+  if (value === null || value === undefined) return '';
+  return String(value).trim();
+}
+
+function normalizeGender(value) {
+  const text = normalizeText(value).toLowerCase();
+  if (['女', 'female', 'f', 'girl', 'woman'].includes(text)) {
+    return 'female';
+  }
+  return 'male';
+}
+
+function createStudentUsername(studentNo, fallbackIndex) {
+  const base = normalizeText(studentNo) || `student_${Date.now()}_${fallbackIndex}`;
+  return base.replace(/\s+/g, '_');
+}
+
+function buildImportSummary(classes, students, users) {
+  return {
+    classCount: classes.length,
+    studentCount: students.length,
+    userCount: users.length
+  };
+}
+
 
 // ========== 系统配置 ==========
 
@@ -233,6 +268,93 @@ router.delete('/questions/:id', (req, res) => {
   }
 });
 
+// ========== 班级导入 ==========
+
+router.post('/import/classes', upload.single('file'), (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    const currentUser = db.findById('users', userId);
+
+    if (!currentUser || currentUser.role !== 'admin') {
+      return res.status(403).json({ success: false, message: '仅管理员可导入班级信息' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: '请上传 Excel 文件' });
+    }
+
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const firstSheetName = workbook.SheetNames[0];
+
+    if (!firstSheetName) {
+      return res.status(400).json({ success: false, message: 'Excel 中未找到工作表' });
+    }
+
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheetName], { defval: '' });
+
+    if (!rows.length) {
+      return res.status(400).json({ success: false, message: 'Excel 数据不能为空' });
+    }
+
+    const importedClasses = [];
+    const currentTeachers = db.find('teachers');
+    const fallbackTeacherId = currentTeachers.length ? currentTeachers[0].id : null;
+
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
+      const rowNumber = index + 2;
+      const className = normalizeText(row['班级名称'] || row['班级'] || row.className);
+      const grade = normalizeText(row['年级'] || row.grade);
+
+      if (!className || !grade) {
+        return res.status(400).json({
+          success: false,
+          message: `第 ${rowNumber} 行缺少必填字段，请确保包含班级名称、年级`
+        });
+      }
+
+      const existsClass = db.findOne('classes', { name: className });
+      if (existsClass) {
+        if (existsClass.grade !== grade) {
+          return res.status(400).json({
+            success: false,
+            message: `第 ${rowNumber} 行班级 ${className} 的年级与现有数据不一致`
+          });
+        }
+        continue;
+      }
+
+      const newClass = db.create('classes', {
+        name: className,
+        grade,
+        teacherId: fallbackTeacherId,
+        students: []
+      });
+      importedClasses.push(newClass);
+
+      if (fallbackTeacherId) {
+        const teacher = db.findById('teachers', fallbackTeacherId);
+        if (teacher && !teacher.classes.includes(newClass.id)) {
+          db.updateById('teachers', fallbackTeacherId, {
+            classes: [...teacher.classes, newClass.id]
+          });
+        }
+      }
+    }
+
+    const summary = { classCount: importedClasses.length };
+    db.addLog(userId, 'IMPORT_CLASSES', summary);
+
+    res.json({
+      success: true,
+      data: summary,
+      message: '班级信息导入成功'
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // ========== 用户管理 ==========
 
 // 获取用户列表
@@ -458,3 +580,5 @@ router.post('/restore', (req, res) => {
 });
 
 module.exports = router;
+
+

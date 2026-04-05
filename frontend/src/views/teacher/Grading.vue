@@ -33,40 +33,55 @@
         <el-table-column label="操作" width="150">
           <template #default="scope">
             <el-button type="primary" link @click="viewAnswer(scope.row)">查看</el-button>
-            <el-button type="primary" link @click="gradeAnswer(scope.row)" v-if="scope.row.status !== 'graded'">
-              批改
+            <el-button type="primary" link @click="gradeAnswer(scope.row)">
+              {{ scope.row.status === 'graded' ? '重新批改' : '批改' }}
             </el-button>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
     
-    <!-- 批改对话框 -->
-    <el-dialog v-model="gradeDialogVisible" title="批改答题" width="800px">
+    <el-dialog v-model="gradeDialogVisible" :title="dialogTitle" width="900px">
       <div v-if="currentAnswer">
-        <div v-for="(qr, index) in currentAnswer.questionResults" :key="index" style="margin-bottom: 20px; padding: 16px; background: #f5f7fa; border-radius: 8px;">
-          <div style="margin-bottom: 12px;">
-            <strong>第{{ index + 1 }}题</strong> ({{ qr.score }}分)
+        <div class="dialog-summary">
+          <span>学生：{{ currentAnswer.student && currentAnswer.student.name ? currentAnswer.student.name : '-' }}</span>
+          <span>作业：{{ currentAnswer.assignment && currentAnswer.assignment.title ? currentAnswer.assignment.title : '-' }}</span>
+          <span>总分：{{ currentAnswer.answer && currentAnswer.answer.totalScore !== undefined ? currentAnswer.answer.totalScore : 0 }}</span>
+        </div>
+
+        <div
+          v-for="(item, index) in currentAnswer.questionResults"
+          :key="item.questionId"
+          class="question-card"
+        >
+          <div class="question-title">
+            <strong>第{{ index + 1 }}题</strong>
+            <span>满分 {{ item.fullScore || 0 }} 分</span>
           </div>
-          <div style="margin-bottom: 8px;">
-            <span>学生答案：</span>{{ qr.answer }}
+          <div class="question-line"><span>题干：</span>{{ item.content || '-' }}</div>
+          <div class="question-line"><span>学生答案：</span>{{ item.studentAnswer || '未作答' }}</div>
+          <div class="question-line"><span>标准答案：</span>{{ item.standardAnswer || '无' }}</div>
+          <div class="question-score">
+            <span>得分：</span>
+            <el-input-number
+              v-model="gradeScores[item.questionId]"
+              :min="0"
+              :max="item.fullScore || 100"
+              :disabled="viewOnly"
+            />
           </div>
-          <div style="margin-bottom: 8px;">
-            <span>正确答案：</span>{{ qr.correctAnswer }}
-          </div>
-          <el-input-number v-model="qr.score" :min="0" :max="10" label="得分" />
         </div>
       </div>
       <template #footer>
-        <el-button @click="gradeDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitGrade">提交批改</el-button>
+        <el-button @click="gradeDialogVisible = false">关闭</el-button>
+        <el-button v-if="!viewOnly" type="primary" @click="submitGrade">提交批改</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '@/utils/api'
 import dayjs from 'dayjs'
@@ -75,65 +90,69 @@ var loading = ref(false)
 var gradeDialogVisible = ref(false)
 var answers = ref([])
 var currentAnswer = ref(null)
+var viewOnly = ref(false)
+var gradeScores = reactive({})
+
+var dialogTitle = computed(function() {
+  return viewOnly.value ? '查看答题详情' : '批改答题'
+})
 
 onMounted(function() {
   loadAnswers()
 })
+
+function resetGradeScores() {
+  var keys = Object.keys(gradeScores)
+  for (var i = 0; i < keys.length; i++) {
+    delete gradeScores[keys[i]]
+  }
+}
 
 function loadAnswers() {
   loading.value = true
   api.get('/teacher/answers')
     .then(function(res) {
       if (res.success) {
-        var result = []
-        for (var i = 0; i < res.data.length; i++) {
-          var a = res.data[i]
-          result.push({
-            id: a.id,
-            studentId: a.studentId,
-            studentName: '学生' + a.studentId.slice(-3),
-            assignmentTitle: a.assignmentTitle,
-            submittedAt: a.submittedAt,
-            status: a.status,
-            totalScore: a.totalScore
-          })
-        }
-        answers.value = result
+        answers.value = res.data || []
       }
     })
-    .catch(function(error) {
-      console.error('加载失败:', error)
+    .catch(function() {
+      ElMessage.error('加载答题列表失败')
     })
     .finally(function() {
       loading.value = false
     })
 }
 
-function viewAnswer(row) {
-  console.log('查看答题:', row)
-}
-
-function gradeAnswer(row) {
-  api.get('/student/answers/' + row.id)
+function openAnswerDialog(row, onlyView) {
+  api.get('/teacher/answers/' + row.id)
     .then(function(res) {
       if (res.success) {
         currentAnswer.value = res.data
+        viewOnly.value = onlyView
+        resetGradeScores()
+        var list = res.data.questionResults || []
+        for (var i = 0; i < list.length; i++) {
+          gradeScores[list[i].questionId] = list[i].score || 0
+        }
         gradeDialogVisible.value = true
       }
     })
-    .catch(function(error) {
+    .catch(function() {
       ElMessage.error('加载答题详情失败')
     })
 }
 
+function viewAnswer(row) {
+  openAnswerDialog(row, true)
+}
+
+function gradeAnswer(row) {
+  openAnswerDialog(row, false)
+}
+
 function submitGrade() {
-  var scores = {}
-  var qrs = currentAnswer.value.questionResults
-  for (var i = 0; i < qrs.length; i++) {
-    scores[qrs[i].questionId] = qrs[i].score
-  }
-  
-  api.post('/teacher/answers/' + currentAnswer.value.answer.id + '/grade', { scores: scores })
+  api.post('/teacher/answers/' + currentAnswer.value.answer.id + '/grade', { scores: gradeScores })
     .then(function(res) {
       if (res.success) {
         ElMessage.success('批改成功')
@@ -141,7 +160,7 @@ function submitGrade() {
         loadAnswers()
       }
     })
-    .catch(function(error) {
+    .catch(function() {
       ElMessage.error('批改失败')
     })
 }
@@ -150,3 +169,43 @@ function formatDate(date) {
   return date ? dayjs(date).format('YYYY-MM-DD HH:mm') : '-'
 }
 </script>
+
+<style scoped>
+.dialog-summary {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 16px;
+  color: #606266;
+  flex-wrap: wrap;
+}
+
+.question-card {
+  margin-bottom: 16px;
+  padding: 16px;
+  background: #f5f7fa;
+  border-radius: 8px;
+}
+
+.question-title {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.question-line {
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+
+.question-line span,
+.question-score span {
+  color: #909399;
+}
+
+.question-score {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+</style>

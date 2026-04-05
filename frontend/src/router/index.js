@@ -167,6 +167,12 @@ const routes = [
         meta: { title: '用户管理' }
       },
       {
+        path: 'classes',
+        name: 'AdminClasses',
+        component: function() { return import('@/views/admin/Classes.vue') },
+        meta: { title: '班级列表管理' }
+      },
+      {
         path: 'knowledge-points',
         name: 'AdminKnowledgePoints',
         component: function() { return import('@/views/admin/KnowledgePoints.vue') },

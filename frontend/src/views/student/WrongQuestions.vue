@@ -22,7 +22,7 @@
         </el-table-column>
         <el-table-column label="操作" width="120">
           <template #default="scope">
-            <el-button type="primary" link>重做</el-button>
+            <el-button type="primary" link @click="redoQuestion(scope.row)">重做</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -32,9 +32,11 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import api from '@/utils/api'
 import dayjs from 'dayjs'
 
+var router = useRouter()
 var wrongQuestions = ref([])
 
 onMounted(function() {
@@ -51,6 +53,11 @@ function loadData() {
     .catch(function(error) {
       console.error('加载失败:', error)
     })
+}
+
+function redoQuestion(row) {
+  var kpId = row.knowledgePoints && row.knowledgePoints.length ? row.knowledgePoints[0] : ''
+  router.push('/student/practice?kpId=' + kpId + '&questionId=' + row.id)
 }
 
 function getTypeText(type) {

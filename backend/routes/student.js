@@ -2,13 +2,23 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database/memory-db');
 
+function getStudentByUserId(userId) {
+  return db.findById('students', userId) || db.findOne('students', { userId });
+}
+
+function getLatestAnswerByAssignmentAndStudent(assignmentId, studentId) {
+  return db.find('answers')
+    .filter(answer => answer.assignmentId === assignmentId && answer.studentId === studentId)
+    .sort((a, b) => new Date(b.submittedAt || b.createdAt) - new Date(a.submittedAt || a.createdAt))[0] || null;
+}
+
 // ========== 个人信息管理 ==========
 
 // 获取个人信息
 router.get('/profile', (req, res) => {
   try {
     const studentId = req.headers['x-user-id'];
-    const student = db.findById('students', studentId);
+    const student = getStudentByUserId(studentId);
     
     if (!student) {
       // 尝试从用户表查找
@@ -52,12 +62,12 @@ router.put('/profile', (req, res) => {
     const studentId = req.headers['x-user-id'];
     const { name, gender, email, phone } = req.body;
     
-    const student = db.findById('students', studentId);
+    const student = getStudentByUserId(studentId);
     if (!student) {
       return res.status(404).json({ success: false, message: '学生不存在' });
     }
     
-    const updated = db.updateById('students', studentId, { name, gender });
+    const updated = db.updateById('students', student.id, { name, gender });
     
     // 同步更新用户信息
     db.updateById('users', student.userId || studentId, { name, email, phone });
@@ -80,15 +90,15 @@ router.post('/bind-class', (req, res) => {
     }
     
     // 更新学生的班级
-    const student = db.findById('students', studentId);
+    const student = getStudentByUserId(studentId);
     if (student) {
-      db.updateById('students', studentId, { classId });
+      db.updateById('students', student.id, { classId });
     }
     
     // 更新班级的学生列表
-    if (!cls.students.includes(studentId)) {
+    if (student && !cls.students.includes(student.id)) {
       db.updateById('classes', classId, {
-        students: [...cls.students, studentId]
+        students: [...cls.students, student.id]
       });
     }
     
@@ -106,7 +116,7 @@ router.get('/assignments', (req, res) => {
     const studentId = req.headers['x-user-id'];
     const { status } = req.query;
     
-    const student = db.findById('students', studentId);
+    const student = getStudentByUserId(studentId);
     if (!student) {
       return res.status(404).json({ success: false, message: '学生不存在' });
     }
@@ -120,14 +130,16 @@ router.get('/assignments', (req, res) => {
     // 过滤出学生相关的作业
     const studentAssignments = assignments.map(assignment => {
       const paper = db.findById('papers', assignment.paperId);
-      const answer = db.findOne('answers', { assignmentId: assignment.id, studentId });
+      const latestAnswer = getLatestAnswerByAssignmentAndStudent(assignment.id, student.id);
       
       return {
         ...assignment,
         paperTitle: paper?.title,
         questionCount: paper?.questions?.length || 0,
-        submitted: !!answer,
-        score: answer?.totalScore
+        submitted: !!latestAnswer,
+        latestAnswerId: latestAnswer?.id,
+        score: latestAnswer?.totalScore,
+        answerStatus: latestAnswer?.status || null
       };
     });
     
@@ -192,6 +204,11 @@ router.post('/assignments/:id/submit', (req, res) => {
     const studentId = req.headers['x-user-id'];
     const { id } = req.params;
     const { answers: questionAnswers } = req.body;
+    const student = getStudentByUserId(studentId);
+    
+    if (!student) {
+      return res.status(404).json({ success: false, message: '学生不存在' });
+    }
     
     const assignment = db.findById('assignments', id);
     if (!assignment) {
@@ -252,7 +269,7 @@ router.post('/assignments/:id/submit', (req, res) => {
       assignmentId: id,
       paperId: assignment.paperId,
       classId: assignment.classId,
-      studentId,
+      studentId: student.id,
       answers: questionAnswers,
       questionResults,
       totalScore,
@@ -274,25 +291,64 @@ router.post('/assignments/:id/submit', (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+// 获取最近一次答题记录
+router.get('/assignments/:id/latest-answer', (req, res) => {
+  try {
+    const studentId = req.headers['x-user-id'];
+    const { id } = req.params;
+    const student = getStudentByUserId(studentId);
 
+    if (!student) {
+      return res.status(404).json({ success: false, message: '学生不存在' });
+    }
+
+    const assignment = db.findById('assignments', id);
+    if (!assignment) {
+      return res.status(404).json({ success: false, message: '作业不存在' });
+    }
+
+    const latestAnswer = getLatestAnswerByAssignmentAndStudent(id, student.id);
+    if (!latestAnswer) {
+      return res.status(404).json({ success: false, message: '暂无答题记录' });
+    }
+
+    res.json({
+      success: true,
+      data: { answerId: latestAnswer.id }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 // 查看答题结果
 router.get('/answers/:id', (req, res) => {
   try {
+    const studentId = req.headers['x-user-id'];
+    const student = getStudentByUserId(studentId);
     const { id } = req.params;
     const answer = db.findById('answers', id);
     
     if (!answer) {
       return res.status(404).json({ success: false, message: '答题记录不存在' });
     }
+
+    if (student && answer.studentId !== student.id) {
+      return res.status(403).json({ success: false, message: '无权查看该答题记录' });
+    }
     
     const paper = db.findById('papers', answer.paperId);
     const assignment = db.findById('assignments', answer.assignmentId);
     
-    // 获取题目详情和答案
     const questions = answer.questionResults.map(qr => {
       const question = db.findById('questions', qr.questionId);
+      const manualScore = answer.scores && answer.scores[qr.questionId] !== undefined
+        ? answer.scores[qr.questionId]
+        : qr.score;
+
       return {
         ...qr,
+        score: manualScore,
+        fullScore: question?.score || 0,
         content: question?.content,
         options: question?.options,
         correctAnswer: question?.answer,
@@ -304,7 +360,10 @@ router.get('/answers/:id', (req, res) => {
     res.json({
       success: true,
       data: {
-        answer,
+        answer: {
+          ...answer,
+          totalScore: answer.totalScore || 0
+        },
         paper,
         assignment,
         questions
@@ -321,12 +380,14 @@ router.get('/answers/:id', (req, res) => {
 router.get('/knowledge-graph', (req, res) => {
   try {
     const studentId = req.headers['x-user-id'];
+    const student = getStudentByUserId(studentId);
+    const realStudentId = student ? student.id : studentId;
     
     // 获取所有知识点
     const knowledgePoints = db.find('knowledgePoints');
     
     // 获取学生的答题记录
-    const answers = db.find('answers').filter(a => a.studentId === studentId);
+    const answers = db.find('answers').filter(a => a.studentId === realStudentId);
     
     // 计算每个知识点的掌握度
     const knowledgePointStats = {};
@@ -364,9 +425,11 @@ router.get('/knowledge-graph', (req, res) => {
 router.get('/weak-points', (req, res) => {
   try {
     const studentId = req.headers['x-user-id'];
+    const student = getStudentByUserId(studentId);
+    const realStudentId = student ? student.id : studentId;
     
     // 获取学生的答题记录
-    const answers = db.find('answers').filter(a => a.studentId === studentId);
+    const answers = db.find('answers').filter(a => a.studentId === realStudentId);
     
     // 统计错误题目
     const wrongKnowledgePoints = {};
@@ -412,9 +475,11 @@ router.get('/weak-points', (req, res) => {
 router.get('/learning-track', (req, res) => {
   try {
     const studentId = req.headers['x-user-id'];
+    const student = getStudentByUserId(studentId);
+    const realStudentId = student ? student.id : studentId;
     
     const answers = db.find('answers')
-      .filter(a => a.studentId === studentId && a.totalScore !== undefined)
+      .filter(a => a.studentId === realStudentId && a.totalScore !== undefined)
       .sort((a, b) => new Date(a.submittedAt) - new Date(b.submittedAt));
     
     const track = answers.map(answer => {
@@ -442,11 +507,19 @@ router.get('/learning-track', (req, res) => {
 router.get('/practice/:knowledgePointId', (req, res) => {
   try {
     const { knowledgePointId } = req.params;
+    const { questionId } = req.query;
+
+    if (questionId) {
+      const question = db.findById('questions', questionId);
+      if (!question) {
+        return res.status(404).json({ success: false, message: '题目不存在' });
+      }
+      return res.json({ success: true, data: [question] });
+    }
     
-    // 查找相关题目
     const questions = db.find('questions')
       .filter(q => q.knowledgePoints && q.knowledgePoints.includes(knowledgePointId))
-      .slice(0, 10); // 最多返回10题
+      .slice(0, 10);
     
     res.json({ success: true, data: questions });
   } catch (error) {
@@ -458,8 +531,10 @@ router.get('/practice/:knowledgePointId', (req, res) => {
 router.get('/wrong-questions', (req, res) => {
   try {
     const studentId = req.headers['x-user-id'];
+    const student = getStudentByUserId(studentId);
+    const realStudentId = student ? student.id : studentId;
     
-    const answers = db.find('answers').filter(a => a.studentId === studentId);
+    const answers = db.find('answers').filter(a => a.studentId === realStudentId);
     
     const wrongQuestions = [];
     answers.forEach(answer => {

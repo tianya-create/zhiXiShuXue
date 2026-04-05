@@ -21,6 +21,11 @@
           <el-icon><User /></el-icon>
           <span class="menu-text">用户管理</span>
         </el-menu-item>
+
+        <el-menu-item index="/admin/classes">
+          <el-icon><OfficeBuilding /></el-icon>
+          <span class="menu-text">班级列表管理</span>
+        </el-menu-item>
         
         <el-menu-item index="/admin/knowledge-points">
           <el-icon><Share /></el-icon>

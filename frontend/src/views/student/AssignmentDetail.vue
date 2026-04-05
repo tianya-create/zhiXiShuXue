@@ -26,7 +26,6 @@
         
         <div class="question-content">{{ question.content }}</div>
         
-        <!-- 选择题 -->
         <div v-if="question.type === 'choice'" class="question-options">
           <el-radio-group v-model="answers[question.id]" :disabled="viewMode">
             <el-radio
@@ -40,7 +39,6 @@
           </el-radio-group>
         </div>
         
-        <!-- 填空题 -->
         <div v-else-if="question.type === 'fill'" class="question-fill">
           <el-input
             v-model="answers[question.id]"
@@ -49,7 +47,6 @@
           />
         </div>
         
-        <!-- 简答题 -->
         <div v-else class="question-short">
           <el-input
             v-model="answers[question.id]"
@@ -60,17 +57,14 @@
           />
         </div>
         
-        <!-- 答题结果 -->
         <div v-if="viewMode && hasResult(question.id)" class="answer-result">
           <div :class="['result-item', getResultCorrect(question.id) ? 'correct' : 'wrong']">
             <span>你的答案：{{ getAnswer(question.id) }}</span>
-            <el-icon v-if="getResultCorrect(question.id)"><Check /></el-icon>
-            <el-icon v-else><Close /></el-icon>
           </div>
-          <div class="correct-answer" v-if="!getResultCorrect(question.id)">
-            正确答案：{{ getCorrectAnswer(question.id) }}
+          <div class="correct-answer">
+            标准答案：{{ getCorrectAnswer(question.id) || '待教师批改' }}
           </div>
-          <div class="score">得分：{{ getScore(question.id) }}分</div>
+          <div class="score">得分：{{ getScore(question.id) }}/{{ question.score || 0 }}分</div>
         </div>
       </div>
       
@@ -106,6 +100,17 @@ var assignmentTitle = computed(function() {
   return assignment.value.title
 })
 
+onMounted(function() {
+  loadAssignment()
+})
+
+function resetResults() {
+  var keys = Object.keys(results)
+  for (var i = 0; i < keys.length; i++) {
+    delete results[keys[i]]
+  }
+}
+
 function hasResult(questionId) {
   return results[questionId] !== undefined
 }
@@ -130,9 +135,14 @@ function getScore(questionId) {
   return result ? result.score : 0
 }
 
-onMounted(function() {
-  loadAssignment()
-})
+function fillResults(questionList) {
+  resetResults()
+  for (var i = 0; i < questionList.length; i++) {
+    var item = questionList[i]
+    results[item.questionId] = item
+    answers[item.questionId] = item.answer || ''
+  }
+}
 
 function loadAssignment() {
   var assignmentId = route.params.id
@@ -143,14 +153,13 @@ function loadAssignment() {
   api.get('/student/assignments/' + assignmentId + '/questions').then(function(res) {
     if (res.success) {
       assignment.value = res.data.assignment
-      questions.value = res.data.questions
+      questions.value = res.data.questions || []
       
-      // 如果是查看结果模式，加载答题结果
       if (viewMode.value) {
         loadResults()
       }
     }
-  }).catch(function(error) {
+  }).catch(function() {
     ElMessage.error('加载作业失败')
   }).finally(function() {
     loading.value = false
@@ -158,8 +167,25 @@ function loadAssignment() {
 }
 
 function loadResults() {
-  // 这里应该从后端加载答题结果
-  // 暂时模拟
+  var cachedAnswerId = sessionStorage.getItem('latest-answer-' + route.params.id)
+  var request = cachedAnswerId
+    ? Promise.resolve({ success: true, data: { answerId: cachedAnswerId } })
+    : api.get('/student/assignments/' + route.params.id + '/latest-answer')
+
+  request.then(function(resultRes) {
+    if (!resultRes.success || !resultRes.data || !resultRes.data.answerId) {
+      throw new Error('no answer id')
+    }
+    var answerId = resultRes.data.answerId
+    sessionStorage.setItem('latest-answer-' + route.params.id, answerId)
+    return api.get('/student/answers/' + answerId)
+  }).then(function(res) {
+    if (res.success) {
+      fillResults(res.data.questions || [])
+    }
+  }).catch(function() {
+    ElMessage.warning('暂无答题结果')
+  })
 }
 
 function submitAnswers() {
@@ -184,24 +210,18 @@ function submitAnswers() {
     }).then(function(res) {
       if (res.success) {
         ElMessage.success('提交成功')
-        // 显示结果
-        var questionResults = res.data.questionResults || []
-        for (var i = 0; i < questionResults.length; i++) {
-          var r = questionResults[i]
-          results[r.questionId] = r
+        if (res.data && res.data.answerId) {
+          sessionStorage.setItem('latest-answer-' + route.params.id, res.data.answerId)
         }
-        
-        // 跳转到结果页
         router.replace('/student/assignment/' + route.params.id + '?view=result')
+        loadResults()
       }
-    }).catch(function(error) {
+    }).catch(function() {
       ElMessage.error('提交失败')
     }).finally(function() {
       submitting.value = false
     })
-  }).catch(function() {
-    // 取消
-  })
+  }).catch(function() {})
 }
 
 function getTypeText(type) {
@@ -256,9 +276,6 @@ function getTypeText(type) {
 }
 
 .result-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   padding: 8px;
   border-radius: 4px;
 }
