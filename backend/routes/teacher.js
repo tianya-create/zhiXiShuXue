@@ -84,7 +84,7 @@ const upload = multer({
     const allowedTypes = /jpg|jpeg|png|pdf/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
-    
+
     if (extname && mimetype) {
       cb(null, true);
     } else {
@@ -100,7 +100,7 @@ router.get('/classes', (req, res) => {
   try {
     const teacherId = req.headers['x-user-id'];
     const teacher = db.findById('teachers', teacherId);
-    
+
     if (!teacher) {
       // 如果不是教师表中的记录，尝试从用户表查找
       const user = db.findById('users', teacherId);
@@ -117,15 +117,15 @@ router.get('/classes', (req, res) => {
       }
       return res.status(404).json({ success: false, message: '教师不存在' });
     }
-    
+
     const classes = db.find('classes').filter(c => teacher.classes.includes(c.id));
-    
+
     // 为每个班级添加学生数量
     const classesWithStudentCount = classes.map(cls => ({
       ...cls,
       studentCount: cls.students ? cls.students.length : 0
     }));
-    
+
     res.json({ success: true, data: classesWithStudentCount });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -137,18 +137,18 @@ router.post('/classes', (req, res) => {
   try {
     const teacherId = req.headers['x-user-id'];
     const { name, grade } = req.body;
-    
+
     if (!name || !grade) {
       return res.status(400).json({ success: false, message: '班级名称和年级不能为空' });
     }
-    
+
     const newClass = db.create('classes', {
       name,
       grade,
       teacherId,
       students: []
     });
-    
+
     // 更新教师的班级列表
     const teacher = db.findById('teachers', teacherId);
     if (teacher) {
@@ -156,9 +156,9 @@ router.post('/classes', (req, res) => {
         classes: [...teacher.classes, newClass.id]
       });
     }
-    
+
     db.addLog(teacherId, 'CREATE_CLASS', { classId: newClass.id, name });
-    
+
     res.json({ success: true, data: newClass, message: '班级创建成功' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -170,13 +170,13 @@ router.put('/classes/:id', (req, res) => {
   try {
     const { id } = req.params;
     const { name, grade } = req.body;
-    
+
     const updated = db.updateById('classes', id, { name, grade });
-    
+
     if (!updated) {
       return res.status(404).json({ success: false, message: '班级不存在' });
     }
-    
+
     res.json({ success: true, data: updated, message: '班级更新成功' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -188,11 +188,11 @@ router.delete('/classes/:id', (req, res) => {
   try {
     const { id } = req.params;
     const deleted = db.deleteById('classes', id);
-    
+
     if (!deleted) {
       return res.status(404).json({ success: false, message: '班级不存在' });
     }
-    
+
     res.json({ success: true, message: '班级删除成功' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -206,13 +206,13 @@ router.get('/classes/:classId/students', (req, res) => {
   try {
     const { classId } = req.params;
     const cls = db.findById('classes', classId);
-    
+
     if (!cls) {
       return res.status(404).json({ success: false, message: '班级不存在' });
     }
-    
+
     const students = db.find('students').filter(s => cls.students.includes(s.id));
-    
+
     res.json({ success: true, data: students });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -223,15 +223,15 @@ router.get('/classes/:classId/students', (req, res) => {
 router.post('/students', (req, res) => {
   try {
     const { name, studentNo, classId, gender, email, phone } = req.body;
-    
+
     if (!name || !classId) {
       return res.status(400).json({ success: false, message: '学生姓名和班级不能为空' });
     }
-    
+
     // 创建用户账号
     const bcrypt = require('bcryptjs');
     const defaultPassword = bcrypt.hashSync('123456', 10);
-    
+
     const user = db.create('users', {
       username: studentNo || `student_${Date.now()}`,
       password: defaultPassword,
@@ -240,7 +240,7 @@ router.post('/students', (req, res) => {
       email: email || '',
       phone: phone || ''
     });
-    
+
     // 创建学生记录
     const student = db.create('students', {
       userId: user.id,
@@ -249,7 +249,7 @@ router.post('/students', (req, res) => {
       classId,
       gender: gender || 'male'
     });
-    
+
     // 更新班级学生列表
     const cls = db.findById('classes', classId);
     if (cls) {
@@ -257,7 +257,7 @@ router.post('/students', (req, res) => {
         students: [...cls.students, student.id]
       });
     }
-    
+
     res.json({ success: true, data: student, message: '学生添加成功' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -269,17 +269,17 @@ router.put('/students/:id', (req, res) => {
   try {
     const { id } = req.params;
     const { name, studentNo, gender, email, phone } = req.body;
-    
+
     const student = db.findById('students', id);
     if (!student) {
       return res.status(404).json({ success: false, message: '学生不存在' });
     }
-    
+
     const updated = db.updateById('students', id, { name, studentNo, gender });
-    
+
     // 同步更新用户信息
     db.updateById('users', student.userId, { name, email, phone });
-    
+
     res.json({ success: true, data: updated, message: '学生信息更新成功' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -291,11 +291,11 @@ router.delete('/students/:id', (req, res) => {
   try {
     const { id } = req.params;
     const student = db.findById('students', id);
-    
+
     if (!student) {
       return res.status(404).json({ success: false, message: '学生不存在' });
     }
-    
+
     // 从班级中移除
     const cls = db.findById('classes', student.classId);
     if (cls) {
@@ -303,11 +303,11 @@ router.delete('/students/:id', (req, res) => {
         students: cls.students.filter(s => s !== id)
       });
     }
-    
+
     // 删除学生和用户记录
     db.deleteById('students', id);
     db.deleteById('users', student.userId);
-    
+
     res.json({ success: true, message: '学生删除成功' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -321,13 +321,13 @@ router.post('/papers/upload', upload.single('file'), (req, res) => {
   try {
     const teacherId = req.headers['x-user-id'];
     const { title, classId } = req.body;
-    
+
     if (!req.file) {
       return res.status(400).json({ success: false, message: '请上传文件' });
     }
 
     const originalName = normalizeUploadedFileName(req.file.originalname);
-    
+
     const paper = db.create('papers', {
       title: title || originalName,
       teacherId,
@@ -339,9 +339,9 @@ router.post('/papers/upload', upload.single('file'), (req, res) => {
       status: 'pending', // pending, processing, completed
       questions: []
     });
-    
+
     db.addLog(teacherId, 'UPLOAD_PAPER', { paperId: paper.id, title: paper.title });
-    
+
     res.json({
       success: true,
       data: paper,
@@ -357,13 +357,13 @@ router.get('/papers', (req, res) => {
   try {
     const teacherId = req.headers['x-user-id'];
     const { classId, status, page = 1, pageSize = 10 } = req.query;
-    
+
     let query = { teacherId };
     if (classId) query.classId = classId;
     if (status) query.status = status;
-    
+
     const result = db.paginate('papers', query, parseInt(page), parseInt(pageSize));
-    
+
     res.json({ success: true, data: result });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -375,11 +375,11 @@ router.get('/papers/:id', (req, res) => {
   try {
     const { id } = req.params;
     const paper = db.findById('papers', id);
-    
+
     if (!paper) {
       return res.status(404).json({ success: false, message: '试卷不存在' });
     }
-    
+
     res.json({ success: true, data: paper });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -391,11 +391,11 @@ router.delete('/papers/:id', (req, res) => {
   try {
     const { id } = req.params;
     const paper = db.findById('papers', id);
-    
+
     if (!paper) {
       return res.status(404).json({ success: false, message: '试卷不存在' });
     }
-    
+
     // 删除文件
     if (paper.filePath) {
       const relativePath = paper.filePath.replace(/^\//, '');
@@ -404,9 +404,9 @@ router.delete('/papers/:id', (req, res) => {
         fs.unlinkSync(filePath);
       }
     }
-    
+
     db.deleteById('papers', id);
-    
+
     res.json({ success: true, message: '试卷删除成功' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -419,11 +419,11 @@ router.delete('/papers/:id', (req, res) => {
 router.post('/questions', (req, res) => {
   try {
     const { paperId, type, content, options, answer, knowledgePoints, difficulty, score } = req.body;
-    
+
     if (!paperId || !type || !content) {
       return res.status(400).json({ success: false, message: '参数不完整' });
     }
-    
+
     const question = db.create('questions', {
       paperId,
       type, // choice, fill, shortAnswer
@@ -434,7 +434,7 @@ router.post('/questions', (req, res) => {
       difficulty: difficulty || 'medium', // easy, medium, hard
       score: score || 1
     });
-    
+
     // 更新试卷题目列表
     const paper = db.findById('papers', paperId);
     if (paper) {
@@ -442,7 +442,7 @@ router.post('/questions', (req, res) => {
         questions: [...paper.questions, question.id]
       });
     }
-    
+
     res.json({ success: true, data: question, message: '题目添加成功' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -454,15 +454,15 @@ router.put('/questions/:id', (req, res) => {
   try {
     const { id } = req.params;
     const { content, options, answer, knowledgePoints, difficulty, score } = req.body;
-    
+
     const updated = db.updateById('questions', id, {
       content, options, answer, knowledgePoints, difficulty, score
     });
-    
+
     if (!updated) {
       return res.status(404).json({ success: false, message: '题目不存在' });
     }
-    
+
     res.json({ success: true, data: updated, message: '题目更新成功' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -474,11 +474,11 @@ router.delete('/questions/:id', (req, res) => {
   try {
     const { id } = req.params;
     const question = db.findById('questions', id);
-    
+
     if (!question) {
       return res.status(404).json({ success: false, message: '题目不存在' });
     }
-    
+
     // 从试卷中移除
     const paper = db.findById('papers', question.paperId);
     if (paper) {
@@ -486,9 +486,9 @@ router.delete('/questions/:id', (req, res) => {
         questions: paper.questions.filter(q => q !== id)
       });
     }
-    
+
     db.deleteById('questions', id);
-    
+
     res.json({ success: true, message: '题目删除成功' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -502,11 +502,11 @@ router.post('/assignments', (req, res) => {
   try {
     const teacherId = req.headers['x-user-id'];
     const { title, paperId, classId, studentIds, deadline, type, level } = req.body;
-    
+
     if (!title || !paperId || !classId) {
       return res.status(400).json({ success: false, message: '参数不完整' });
     }
-    
+
     const assignment = db.create('assignments', {
       title,
       paperId,
@@ -519,9 +519,9 @@ router.post('/assignments', (req, res) => {
       status: 'published',
       createdAt: new Date().toISOString()
     });
-    
+
     db.addLog(teacherId, 'CREATE_ASSIGNMENT', { assignmentId: assignment.id, title });
-    
+
     res.json({ success: true, data: assignment, message: '作业发布成功' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -538,9 +538,9 @@ router.get('/assignments', (req, res) => {
     }
 
     const { classId, status } = req.query;
-    
+
     let assignments = db.find('assignments', { teacherId: teacher.id });
-    
+
     if (classId) {
       assignments = assignments.filter(a => a.classId === classId);
     }
@@ -560,7 +560,7 @@ router.get('/assignments', (req, res) => {
         answerCount
       };
     });
-    
+
     res.json({ success: true, data: result });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -631,9 +631,9 @@ router.delete('/assignments/:id', (req, res) => {
 router.get('/answers', (req, res) => {
   try {
     const { assignmentId, classId, studentId } = req.query;
-    
+
     let answers = db.find('answers');
-    
+
     if (assignmentId) {
       answers = answers.filter(a => a.assignmentId === assignmentId);
     }
@@ -653,7 +653,7 @@ router.get('/answers', (req, res) => {
         studentName: student ? student.name : '未知学生'
       };
     });
-    
+
     res.json({ success: true, data: result });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -682,21 +682,25 @@ router.post('/answers/:id/grade', (req, res) => {
     const { id } = req.params;
     const { scores, comments } = req.body;
     const teacherId = req.headers['x-user-id'];
-    
+
     const answer = db.findById('answers', id);
     if (!answer) {
       return res.status(404).json({ success: false, message: '答题记录不存在' });
     }
-    
+
+    // 计算总分
+    const totalScore = Object.values(scores).reduce((sum, s) => sum + s, 0);
+
+    // 更新答题记录
     const updated = db.updateById('answers', id, {
       scores,
       comments,
-      totalScore: Object.values(scores).reduce((sum, s) => sum + s, 0),
+      totalScore,
       gradedBy: teacherId,
       gradedAt: new Date().toISOString(),
       status: 'graded'
     });
-    
+
     res.json({ success: true, data: updated, message: '批改成功' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -710,34 +714,51 @@ router.get('/analytics/class/:classId', (req, res) => {
   try {
     const { classId } = req.params;
     const cls = db.findById('classes', classId);
-    
+
     if (!cls) {
       return res.status(404).json({ success: false, message: '班级不存在' });
     }
-    
+
     // 获取班级所有答题记录
     const answers = db.find('answers').filter(a => a.classId === classId);
-    
+
     // 计算统计数据
     let totalScore = 0;
     let totalCount = 0;
     const knowledgePointStats = {};
     const studentScores = [];
-    
+    const studentLevels = [];
+
     answers.forEach(answer => {
       if (answer.totalScore !== undefined) {
         totalScore += answer.totalScore;
         totalCount++;
-        
+
         const student = db.findById('students', answer.studentId);
         if (student) {
+          // 计算学生层次
+          let level = 'normal';
+          if (answer.totalScore >= 90) {
+            level = 'strong';
+          } else if (answer.totalScore < 60) {
+            level = 'weak';
+          }
+
           studentScores.push({
             studentId: answer.studentId,
             studentName: student.name,
+            score: answer.totalScore,
+            level
+          });
+
+          studentLevels.push({
+            studentId: answer.studentId,
+            studentName: student.name,
+            level,
             score: answer.totalScore
           });
         }
-        
+
         // 统计知识点
         if (answer.knowledgePointScores) {
           Object.entries(answer.knowledgePointScores).forEach(([kp, score]) => {
@@ -750,15 +771,22 @@ router.get('/analytics/class/:classId', (req, res) => {
         }
       }
     });
-    
+
     const avgScore = totalCount > 0 ? (totalScore / totalCount).toFixed(2) : 0;
-    
+
     // 计算知识点掌握度
     const knowledgePointMastery = {};
     Object.entries(knowledgePointStats).forEach(([kp, stats]) => {
       knowledgePointMastery[kp] = (stats.total / stats.count).toFixed(2);
     });
-    
+
+    // 统计各层次学生数量
+    const levelDistribution = {
+      weak: studentLevels.filter(s => s.level === 'weak').length,
+      normal: studentLevels.filter(s => s.level === 'normal').length,
+      strong: studentLevels.filter(s => s.level === 'strong').length
+    };
+
     res.json({
       success: true,
       data: {
@@ -766,7 +794,9 @@ router.get('/analytics/class/:classId', (req, res) => {
         studentCount: cls.students.length,
         completedCount: totalCount,
         studentScores,
-        knowledgePointMastery
+        knowledgePointMastery,
+        levelDistribution,
+        studentLevels
       }
     });
   } catch (error) {
@@ -779,14 +809,14 @@ router.get('/analytics/student/:studentId', (req, res) => {
   try {
     const { studentId } = req.params;
     const student = db.findById('students', studentId);
-    
+
     if (!student) {
       return res.status(404).json({ success: false, message: '学生不存在' });
     }
-    
+
     // 获取学生所有答题记录
     const answers = db.find('answers').filter(a => a.studentId === studentId);
-    
+
     // 计算成绩趋势
     const scoreTrend = answers
       .filter(a => a.totalScore !== undefined)
@@ -795,7 +825,7 @@ router.get('/analytics/student/:studentId', (req, res) => {
         score: a.totalScore,
         assignmentTitle: db.findById('assignments', a.assignmentId)?.title || '未知作业'
       }));
-    
+
     // 知识点掌握情况
     const knowledgePointStats = {};
     answers.forEach(answer => {
@@ -809,7 +839,7 @@ router.get('/analytics/student/:studentId', (req, res) => {
         });
       }
     });
-    
+
     const knowledgePointMastery = {};
     Object.entries(knowledgePointStats).forEach(([kp, stats]) => {
       knowledgePointMastery[kp] = {
@@ -817,7 +847,7 @@ router.get('/analytics/student/:studentId', (req, res) => {
         count: stats.count
       };
     });
-    
+
     // 错题列表
     const wrongQuestions = [];
     answers.forEach(answer => {
@@ -839,7 +869,7 @@ router.get('/analytics/student/:studentId', (req, res) => {
         });
       }
     });
-    
+
     res.json({
       success: true,
       data: {

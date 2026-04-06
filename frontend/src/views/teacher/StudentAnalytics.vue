@@ -43,7 +43,10 @@
     
     <el-card v-if="studentId" class="gradient-card" v-loading="loading" style="margin-top: 20px;">
       <template #header>
-        <span>学生信息</span>
+        <div class="card-header">
+          <span>学生信息</span>
+          <el-button type="primary" @click="exportPDF">导出学情报告</el-button>
+        </div>
       </template>
       
       <el-descriptions :column="3" border v-if="studentInfo">
@@ -179,6 +182,19 @@ function loadAnalytics() {
   })
 }
 
+// 知识点映射
+const knowledgePointMap = {
+  'kp-001': '有理数',
+  'kp-002': '加减法',
+  'kp-003': '乘除法',
+  'kp-005': '方程解法',
+  'kp-007': '平行线'
+};
+
+function getKnowledgePointName(code) {
+  return knowledgePointMap[code] || code;
+}
+
 function renderCharts() {
   // 成绩趋势图
   var scoreDom = document.getElementById('scoreChart')
@@ -223,7 +239,7 @@ function renderCharts() {
     for (var i = 0; i < keys.length; i++) {
       var k = keys[i]
       pieData.push({
-        name: k.slice(0, 8),
+        name: getKnowledgePointName(k),
         value: parseFloat(mastery[k].avgScore)
       })
     }
@@ -242,6 +258,185 @@ function renderCharts() {
 
 function viewStudentAnalytics(student) {
   router.push('/teacher/analytics/student/' + student.id)
+}
+
+function exportPDF() {
+  if (!studentInfo.value || !analytics.value) {
+    return
+  }
+  
+  // 构建打印内容
+  const studentName = studentInfo.value.name;
+  const studentNo = studentInfo.value.studentNo;
+  const gender = studentInfo.value.gender === 'male' ? '男' : '女';
+  const currentDate = new Date().toLocaleString();
+  
+  // 构建错题列表HTML
+  let wrongQuestionsHtml = '';
+  wrongQuestions.value.forEach(q => {
+    wrongQuestionsHtml += `
+      <tr>
+        <td>${q.content || ''}</td>
+        <td>${q.correctAnswer || ''}</td>
+        <td>${q.studentAnswer || ''}</td>
+      </tr>
+    `;
+  });
+  
+  // 构建成绩趋势表格HTML
+  let scoreTrendHtml = '';
+  if (analytics.value.scoreTrend && analytics.value.scoreTrend.length > 0) {
+    const dates = analytics.value.scoreTrend.map(item => item.date ? item.date.slice(5, 10) : '');
+    const scores = analytics.value.scoreTrend.map(item => item.score);
+    
+    scoreTrendHtml = `
+      <table class="info-table">
+        <tr>
+          <th>时间</th>
+          ${dates.map(date => `<th>${date}</th>`).join('')}
+        </tr>
+        <tr>
+          <th>成绩</th>
+          ${scores.map(score => `<td>${score}</td>`).join('')}
+        </tr>
+      </table>
+    `;
+  } else {
+    scoreTrendHtml = '<p>暂无成绩数据</p>';
+  }
+  
+  // 构建知识点掌握情况表格HTML
+  let knowledgeMasteryHtml = '';
+  if (analytics.value.knowledgePointMastery) {
+    const knowledgeItems = Object.entries(analytics.value.knowledgePointMastery);
+    if (knowledgeItems.length > 0) {
+      knowledgeMasteryHtml = `
+        <table class="info-table">
+          <tr>
+            <th>知识点</th>
+            <th>掌握度</th>
+          </tr>
+          ${knowledgeItems.map(([key, value]) => `
+            <tr>
+              <td>${getKnowledgePointName(key)}</td>
+              <td>${typeof value === 'object' ? value.avgScore + '%' : value + '%'}</td>
+            </tr>
+          `).join('')}
+        </table>
+      `;
+    } else {
+      knowledgeMasteryHtml = '<p>暂无知识点数据</p>';
+    }
+  } else {
+    knowledgeMasteryHtml = '<p>暂无知识点数据</p>';
+  }
+  
+  // 构建完整的HTML
+  const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>学生学情报告 - ${studentName}</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      line-height: 1.6;
+    }
+    h1, h2, h3 {
+      color: #333;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .info-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+    .info-table th, .info-table td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+    .info-table th {
+      background-color: #f2f2f2;
+    }
+    .footer {
+      margin-top: 50px;
+      text-align: center;
+      font-size: 12px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>学生学情报告</h1>
+    <h2>${studentName} - ${studentNo}</h2>
+    <p>生成时间: ${currentDate}</p>
+  </div>
+  
+  <h3>一、学生基本信息</h3>
+  <table class="info-table">
+    <tr>
+      <th>姓名</th>
+      <td>${studentName}</td>
+      <th>学号</th>
+      <td>${studentNo}</td>
+      <th>性别</th>
+      <td>${gender}</td>
+    </tr>
+  </table>
+  
+  <h3>二、成绩趋势</h3>
+  ${scoreTrendHtml}
+  
+  <h3>三、知识点掌握情况</h3>
+  ${knowledgeMasteryHtml}
+  
+  <h3>四、错题列表</h3>
+  <table class="info-table">
+    <tr>
+      <th>题目内容</th>
+      <th>正确答案</th>
+      <th>学生答案</th>
+    </tr>
+    ${wrongQuestionsHtml}
+  </table>
+  
+  <div class="footer">
+    <p>© 2024 在线教育平台</p>
+  </div>
+</body>
+</html>
+  `;
+  
+  // 创建一个新的窗口
+  const printWindow = window.open('', '_blank', 'width=800,height=600');
+  
+  if (printWindow) {
+    // 写入内容
+    printWindow.document.open();
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    
+    // 等待内容加载完成
+    printWindow.onload = function() {
+      // 给用户一些时间查看内容
+      setTimeout(function() {
+        printWindow.print();
+        
+        // 打印完成后关闭窗口
+        printWindow.onafterprint = function() {
+          printWindow.close();
+        };
+      }, 500);
+    };
+  } else {
+    alert('无法打开打印窗口，请检查浏览器设置');
+  }
 }
 </script>
 
