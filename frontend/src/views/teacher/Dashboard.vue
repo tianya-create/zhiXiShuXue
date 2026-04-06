@@ -247,6 +247,10 @@ function viewClassAnalytics(classId) {
   align-items: center;
 }
 
+.card-header .el-button {
+  color: white;
+}
+
 .quick-actions {
   display: flex;
   gap: 16px;
@@ -256,5 +260,15 @@ function viewClassAnalytics(classId) {
   flex: 1;
   height: 60px;
   font-size: 16px;
+}
+
+.quick-actions .el-button:nth-child(4) {
+  background-color: #667eea;
+  border-color: #667eea;
+}
+
+.quick-actions .el-button:nth-child(4):hover {
+  background-color: #5a6fe5;
+  border-color: #5a6fe5;
 }
 </style>

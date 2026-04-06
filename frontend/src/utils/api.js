@@ -11,13 +11,13 @@ var api = axios.create({
 
 // 请求拦截器
 api.interceptors.request.use(
-  function(config) {
+  function (config) {
     // 添加 token
     var token = localStorage.getItem('token')
     if (token) {
       config.headers.Authorization = 'Bearer ' + token
     }
-    
+
     // 添加用户 ID（后端需要）
     var userStr = localStorage.getItem('user')
     var user = {}
@@ -31,20 +31,20 @@ api.interceptors.request.use(
     if (user.id) {
       config.headers['X-User-Id'] = user.id
     }
-    
+
     return config
   },
-  function(error) {
+  function (error) {
     return Promise.reject(error)
   }
 )
 
 // 响应拦截器
 api.interceptors.response.use(
-  function(response) {
+  function (response) {
     return response.data
   },
-  function(error) {
+  function (error) {
     if (error.response) {
       var status = error.response.status
       if (status === 401) {
@@ -65,31 +65,31 @@ api.interceptors.response.use(
         console.error('请求错误:', error.response.data)
       }
     }
-    
+
     return Promise.reject(error)
   }
 )
 
 // 封装请求方法
 var request = {
-  get: function(url, params) {
+  get: function (url, params) {
     return api.get(url, { params: params })
   },
-  
-  post: function(url, data) {
+
+  post: function (url, data) {
     return api.post(url, data)
   },
-  
-  put: function(url, data) {
+
+  put: function (url, data) {
     return api.put(url, data)
   },
-  
-  delete: function(url) {
+
+  delete: function (url) {
     return api.delete(url)
   },
-  
+
   // 上传文件
-  upload: function(url, file, data, onProgress) {
+  upload: function (url, file, data, onProgress) {
     var formData = new FormData()
     formData.append('file', file)
 
@@ -107,12 +107,12 @@ var request = {
         }
       }
     }
-    
+
     return api.post(url, formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       },
-      onUploadProgress: function(progressEvent) {
+      onUploadProgress: function (progressEvent) {
         if (onProgress) {
           var percent = Math.round((progressEvent.loaded * 100) / progressEvent.total)
           onProgress(percent)

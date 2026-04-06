@@ -7,7 +7,10 @@
     
     <el-card class="gradient-card">
       <template #header>
-        <span>待批改列表</span>
+        <div class="card-header">
+          <span>待批改列表</span>
+          <el-badge :value="pendingCount" type="danger" />
+        </div>
       </template>
       
       <el-table :data="answers" style="width: 100%" v-loading="loading">
@@ -67,6 +70,16 @@
               v-model="gradeScores[item.questionId]"
               :min="0"
               :max="item.fullScore || 100"
+              :disabled="viewOnly || (item.questionType !== 'shortAnswer')"
+            />
+          </div>
+          <div class="question-comment" v-if="item.questionType === 'shortAnswer'">
+            <span>评语：</span>
+            <el-input
+              v-model="gradeComments[item.questionId]"
+              type="textarea"
+              :rows="2"
+              placeholder="请输入评语"
               :disabled="viewOnly"
             />
           </div>
@@ -92,19 +105,28 @@ var answers = ref([])
 var currentAnswer = ref(null)
 var viewOnly = ref(false)
 var gradeScores = reactive({})
+var gradeComments = reactive({})
 
 var dialogTitle = computed(function() {
   return viewOnly.value ? '查看答题详情' : '批改答题'
+})
+
+var pendingCount = computed(function() {
+  return answers.value.filter(a => a.status !== 'graded').length
 })
 
 onMounted(function() {
   loadAnswers()
 })
 
-function resetGradeScores() {
-  var keys = Object.keys(gradeScores)
-  for (var i = 0; i < keys.length; i++) {
-    delete gradeScores[keys[i]]
+function resetGradeData() {
+  var scoreKeys = Object.keys(gradeScores)
+  for (var i = 0; i < scoreKeys.length; i++) {
+    delete gradeScores[scoreKeys[i]]
+  }
+  var commentKeys = Object.keys(gradeComments)
+  for (var i = 0; i < commentKeys.length; i++) {
+    delete gradeComments[commentKeys[i]]
   }
 }
 
@@ -130,10 +152,11 @@ function openAnswerDialog(row, onlyView) {
       if (res.success) {
         currentAnswer.value = res.data
         viewOnly.value = onlyView
-        resetGradeScores()
+        resetGradeData()
         var list = res.data.questionResults || []
         for (var i = 0; i < list.length; i++) {
           gradeScores[list[i].questionId] = list[i].score || 0
+          gradeComments[list[i].questionId] = list[i].comment || ''
         }
         gradeDialogVisible.value = true
       }
@@ -152,7 +175,10 @@ function gradeAnswer(row) {
 }
 
 function submitGrade() {
-  api.post('/teacher/answers/' + currentAnswer.value.answer.id + '/grade', { scores: gradeScores })
+  api.post('/teacher/answers/' + currentAnswer.value.answer.id + '/grade', { 
+    scores: gradeScores,
+    comments: gradeComments
+  })
     .then(function(res) {
       if (res.success) {
         ElMessage.success('批改成功')
