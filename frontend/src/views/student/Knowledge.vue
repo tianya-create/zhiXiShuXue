@@ -2,26 +2,33 @@
   <div class="knowledge-graph">
     <div class="page-header">
       <h2>知识图谱</h2>
-      <p>查看您的知识点掌握情况</p>
+      <p>查看您的知识点掌握情况，并可直达相关错题</p>
     </div>
-    
+
     <el-card class="gradient-card">
       <template #header>
         <span>知识点掌握状态</span>
       </template>
-      
+
       <div class="knowledge-container">
         <div v-for="kp in knowledgePoints" :key="kp.id" class="knowledge-category">
           <h3>{{ kp.name }}</h3>
           <div class="knowledge-nodes">
-            <div
-              v-for="child in kp.children"
-              :key="child.id"
-              :class="['knowledge-node', getMasteryClass(child.masteryRate)]"
-              @click="viewDetail(child)"
-            >
-              {{ child.name }}
-              <span class="mastery-rate">{{ child.masteryRate }}%</span>
+            <div v-for="child in kp.children" :key="child.id" :class="['knowledge-node', getMasteryClass(child.masteryRate)]">
+              <div class="node-main" @click="viewDetail(child)">
+                <div class="node-name">{{ child.name }}</div>
+                <div class="node-meta">
+                  <span class="mastery-rate">{{ child.masteryRate }}%</span>
+                  <el-tag size="small" :type="getTagType(child.masteryLabel)">{{ child.masteryLabel }}</el-tag>
+                </div>
+                <div class="node-footer">
+                  错题 {{ child.wrongCount || 0 }} · 补练 {{ child.practiceCount || 0 }}
+                </div>
+                <div class="node-actions">
+                  <el-button size="small" type="danger" plain @click.stop="goWrongQuestions(child)">查看错题</el-button>
+                  <el-button size="small" type="primary" plain @click.stop="goPractice(child)">进行补练</el-button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -66,8 +73,29 @@ function getMasteryClass(rate) {
   return 'weak'
 }
 
+function getTagType(label) {
+  if (label === '已掌握') return 'success'
+  if (label === '学习中') return 'warning'
+  return 'danger'
+}
+
+function getTypeText(type) {
+  if (type === 'choice') return '选择题'
+  if (type === 'fill') return '填空题'
+  if (type === 'shortAnswer') return '简答题'
+  return '题目'
+}
+
 function viewDetail(kp) {
-  router.push('/student/practice?kpId=' + kp.id)
+  goPractice(kp)
+}
+
+function goWrongQuestions(kp) {
+  router.push({ path: '/student/wrong-questions', query: { kpId: kp.id } })
+}
+
+function goPractice(kp) {
+  router.push({ path: '/student/practice', query: { kpId: kp.id } })
 }
 </script>
 
@@ -90,13 +118,18 @@ function viewDetail(kp) {
 }
 
 .knowledge-node {
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
-  align-items: center;
-  padding: 12px 20px;
-  border-radius: 12px;
-  cursor: pointer;
+  gap: 12px;
+  min-width: 240px;
+  max-width: 320px;
+  padding: 14px 18px;
+  border-radius: 14px;
   transition: all 0.3s;
+}
+
+.node-main {
+  cursor: pointer;
 }
 
 .knowledge-node.mastered {
@@ -119,9 +152,50 @@ function viewDetail(kp) {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-.mastery-rate {
-  font-size: 12px;
-  margin-top: 4px;
-  opacity: 0.9;
+.node-name {
+  font-weight: 700;
 }
+
+.node-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mastery-rate,
+.node-footer {
+  font-size: 12px;
+  opacity: 0.92;
+}
+
+
+.node-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.action-btn {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.action-btn:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.action-btn-primary {
+  border-color: rgba(255, 255, 255, 0.85);
+}
+
+.action-btn-danger {
+  border-color: rgba(255, 255, 255, 0.85);
+}
+
 </style>

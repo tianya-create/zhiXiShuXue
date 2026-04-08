@@ -2,23 +2,31 @@
   <div class="grading-center">
     <div class="page-header">
       <h2>批改中心</h2>
-      <p>批改学生作业和试卷</p>
+      <p>查看客观题自动结果，并完成主观题手动批改</p>
     </div>
-    
+
     <el-card class="gradient-card">
       <template #header>
         <div class="card-header">
-          <span>待批改列表</span>
-          <el-badge :value="pendingCount" type="danger" />
+          <div class="header-left">
+            <span>答题列表</span>
+            <el-badge :value="pendingCount" type="danger" />
+          </div>
+          <el-button type="success" @click="exportExcel">导出Excel</el-button>
         </div>
       </template>
-      
+
       <el-table :data="answers" style="width: 100%" v-loading="loading">
         <el-table-column prop="studentName" label="学生" width="120" />
         <el-table-column prop="assignmentTitle" label="作业名称" />
         <el-table-column prop="submittedAt" label="提交时间" width="180">
           <template #default="scope">
             {{ formatDate(scope.row.submittedAt) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="客观题结果" width="120">
+          <template #default="scope">
+            <el-tag type="info">{{ getObjectiveSummary(scope.row) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
@@ -43,8 +51,8 @@
         </el-table-column>
       </el-table>
     </el-card>
-    
-    <el-dialog v-model="gradeDialogVisible" :title="dialogTitle" width="900px">
+
+    <el-dialog v-model="gradeDialogVisible" :title="dialogTitle" width="960px">
       <div v-if="currentAnswer">
         <div class="dialog-summary">
           <span>学生：{{ currentAnswer.student && currentAnswer.student.name ? currentAnswer.student.name : '-' }}</span>
@@ -52,18 +60,19 @@
           <span>总分：{{ currentAnswer.answer && currentAnswer.answer.totalScore !== undefined ? currentAnswer.answer.totalScore : 0 }}</span>
         </div>
 
-        <div
-          v-for="(item, index) in currentAnswer.questionResults"
-          :key="item.questionId"
-          class="question-card"
-        >
+        <div v-for="(item, index) in currentAnswer.questionResults" :key="item.questionId" class="question-card">
           <div class="question-title">
             <strong>第{{ index + 1 }}题</strong>
             <span>满分 {{ item.fullScore || 0 }} 分</span>
           </div>
+          <div class="question-line"><span>题型：</span>{{ getTypeText(item.questionType) }}</div>
           <div class="question-line"><span>题干：</span>{{ item.content || '-' }}</div>
           <div class="question-line"><span>学生答案：</span>{{ item.studentAnswer || '未作答' }}</div>
           <div class="question-line"><span>标准答案：</span>{{ item.standardAnswer || '无' }}</div>
+          <div v-if="item.questionType !== 'shortAnswer'" class="question-line">
+            <span>自动判定：</span>
+            <el-tag :type="item.correct ? 'success' : 'danger'">{{ item.correct ? '正确' : '错误' }}</el-tag>
+          </div>
           <div class="question-score">
             <span>得分：</span>
             <el-input-number
@@ -80,6 +89,16 @@
               type="textarea"
               :rows="2"
               placeholder="请输入评语"
+              :disabled="viewOnly"
+            />
+          </div>
+          <div class="question-comment" v-if="item.questionType === 'shortAnswer'">
+            <span>错因标注：</span>
+            <el-input
+              v-model="gradeCorrections[item.questionId]"
+              type="textarea"
+              :rows="2"
+              placeholder="例如：步骤缺失 / 概念混淆 / 计算错误"
               :disabled="viewOnly"
             />
           </div>
@@ -106,13 +125,14 @@ var currentAnswer = ref(null)
 var viewOnly = ref(false)
 var gradeScores = reactive({})
 var gradeComments = reactive({})
+var gradeCorrections = reactive({})
 
 var dialogTitle = computed(function() {
   return viewOnly.value ? '查看答题详情' : '批改答题'
 })
 
 var pendingCount = computed(function() {
-  return answers.value.filter(a => a.status !== 'graded').length
+  return answers.value.filter(function(a) { return a.status !== 'graded' }).length
 })
 
 onMounted(function() {
@@ -120,14 +140,12 @@ onMounted(function() {
 })
 
 function resetGradeData() {
-  var scoreKeys = Object.keys(gradeScores)
-  for (var i = 0; i < scoreKeys.length; i++) {
-    delete gradeScores[scoreKeys[i]]
-  }
-  var commentKeys = Object.keys(gradeComments)
-  for (var i = 0; i < commentKeys.length; i++) {
-    delete gradeComments[commentKeys[i]]
-  }
+  ;[gradeScores, gradeComments, gradeCorrections].forEach(function(target) {
+    var keys = Object.keys(target)
+    for (var i = 0; i < keys.length; i++) {
+      delete target[keys[i]]
+    }
+  })
 }
 
 function loadAnswers() {
@@ -157,6 +175,7 @@ function openAnswerDialog(row, onlyView) {
         for (var i = 0; i < list.length; i++) {
           gradeScores[list[i].questionId] = list[i].score || 0
           gradeComments[list[i].questionId] = list[i].comment || ''
+          gradeCorrections[list[i].questionId] = list[i].correction || ''
         }
         gradeDialogVisible.value = true
       }
@@ -175,9 +194,10 @@ function gradeAnswer(row) {
 }
 
 function submitGrade() {
-  api.post('/teacher/answers/' + currentAnswer.value.answer.id + '/grade', { 
+  api.post('/teacher/answers/' + currentAnswer.value.answer.id + '/grade', {
     scores: gradeScores,
-    comments: gradeComments
+    comments: gradeComments,
+    corrections: gradeCorrections
   })
     .then(function(res) {
       if (res.success) {
@@ -191,15 +211,43 @@ function submitGrade() {
     })
 }
 
+function exportExcel() {
+  window.open('/api/teacher/answers/export/excel', '_blank')
+}
+
+function getObjectiveSummary(row) {
+  var result = row.questionResults || []
+  var objective = result.filter(function(item) {
+    return item.questionType === 'choice' || item.questionType === 'fill'
+  })
+  var correctCount = objective.filter(function(item) { return item.correct }).length
+  return objective.length ? (correctCount + '/' + objective.length) : '无'
+}
+
+function getTypeText(type) {
+  var map = { choice: '选择题', fill: '填空题', shortAnswer: '简答题' }
+  return map[type] || '未知题型'
+}
+
 function formatDate(date) {
   return date ? dayjs(date).format('YYYY-MM-DD HH:mm') : '-'
 }
 </script>
 
 <style scoped>
+.card-header,
+.header-left,
 .dialog-summary {
   display: flex;
-  gap: 20px;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-header {
+  justify-content: space-between;
+}
+
+.dialog-summary {
   margin-bottom: 16px;
   color: #606266;
   flex-wrap: wrap;
@@ -224,7 +272,8 @@ function formatDate(date) {
 }
 
 .question-line span,
-.question-score span {
+.question-score span,
+.question-comment span {
   color: #909399;
 }
 
@@ -232,6 +281,10 @@ function formatDate(date) {
   display: flex;
   align-items: center;
   gap: 12px;
+  margin-top: 12px;
+}
+
+.question-comment {
   margin-top: 12px;
 }
 </style>

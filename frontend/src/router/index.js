@@ -136,6 +136,12 @@ const routes = [
         meta: { title: '错题本' }
       },
       {
+        path: 'learning-track',
+        name: 'StudentLearningTrack',
+        component: function() { return import('@/views/student/LearningTrack.vue') },
+        meta: { title: '学习轨迹' }
+      },
+      {
         path: 'profile',
         name: 'StudentProfile',
         component: function() { return import('@/views/student/Profile.vue') },

@@ -41,6 +41,11 @@
           <el-icon><Edit /></el-icon>
           <span class="menu-text">错题本</span>
         </el-menu-item>
+
+        <el-menu-item index="/student/learning-track">
+          <el-icon><Clock /></el-icon>
+          <span class="menu-text">学习轨迹</span>
+        </el-menu-item>
         
         <el-menu-item index="/student/profile">
           <el-icon><Setting /></el-icon>

@@ -44,8 +44,14 @@
     <el-card v-if="studentId" class="gradient-card" v-loading="loading" style="margin-top: 20px;">
       <template #header>
         <div class="card-header">
-          <span>学生信息</span>
-          <el-button type="primary" @click="exportPDF">导出学情报告</el-button>
+          <div class="header-left">
+            <span>学生信息</span>
+            <el-button type="primary" @click="exportPDF">导出学情报告</el-button>
+          </div>
+          <div class="header-actions">
+            <el-button type="success" plain @click="goToWrongQuestions">查看错题本</el-button>
+            <el-button type="warning" plain @click="scrollToKnowledge">知识点掌握</el-button>
+          </div>
         </div>
       </template>
       
@@ -57,21 +63,27 @@
     </el-card>
     
     <el-row v-if="studentId" :gutter="20" style="margin-top: 20px;">
-      <el-col :span="12">
+      <el-col :span="8">
         <el-card class="gradient-card">
-          <template #header>成绩趋势</template>
+          <template #header>????</template>
           <div id="scoreChart" style="height: 300px;"></div>
         </el-card>
       </el-col>
-      <el-col :span="12">
-        <el-card class="gradient-card">
-          <template #header>知识点掌握</template>
+      <el-col :span="8">
+        <el-card class="gradient-card" id="knowledge-section">
+          <template #header>?????</template>
           <div id="knowledgeChart" style="height: 300px;"></div>
+        </el-card>
+      </el-col>
+      <el-col :span="8">
+        <el-card class="gradient-card">
+          <template #header>????</template>
+          <div id="levelChart" style="height: 300px;"></div>
         </el-card>
       </el-col>
     </el-row>
     
-    <el-card v-if="studentId" class="gradient-card" style="margin-top: 20px;">
+    <el-card v-if="studentId" id="wrong-questions-section" class="gradient-card" style="margin-top: 20px;">
       <template #header>错题列表</template>
       <el-table :data="wrongQuestions" max-height="400">
         <el-table-column prop="content" label="题目内容" show-overflow-tooltip />
@@ -95,6 +107,7 @@ var studentInfo = ref(null)
 var analytics = ref(null)
 var scoreChart = null
 var knowledgeChart = null
+var levelChart = null
 
 // 学生列表相关
 var students = ref([])
@@ -196,12 +209,12 @@ function getKnowledgePointName(code) {
 }
 
 function renderCharts() {
-  // 成绩趋势图
+  // ?????
   var scoreDom = document.getElementById('scoreChart')
   if (scoreDom) {
     if (scoreChart) scoreChart.dispose()
     scoreChart = echarts.init(scoreDom)
-    
+
     var trend = analytics.value && analytics.value.scoreTrend ? analytics.value.scoreTrend : []
     var xData = []
     var yData = []
@@ -210,13 +223,13 @@ function renderCharts() {
       xData.push(t.date ? t.date.slice(5, 10) : '')
       yData.push(t.score)
     }
-    
+
     scoreChart.setOption({
       tooltip: { trigger: 'axis' },
       xAxis: { type: 'category', data: xData },
       yAxis: { type: 'value' },
       series: [{
-        name: '得分',
+        name: '??',
         type: 'line',
         data: yData,
         smooth: true,
@@ -225,34 +238,81 @@ function renderCharts() {
       }]
     })
   }
-  
-  // 知识点掌握图
+
   var knowledgeDom = document.getElementById('knowledgeChart')
   if (knowledgeDom) {
     if (knowledgeChart) knowledgeChart.dispose()
     knowledgeChart = echarts.init(knowledgeDom)
-    
+
     var mastery = analytics.value && analytics.value.knowledgePointMastery ? analytics.value.knowledgePointMastery : {}
     var keys = Object.keys(mastery).slice(0, 8)
-    
     var pieData = []
-    for (var i = 0; i < keys.length; i++) {
-      var k = keys[i]
+    for (var j = 0; j < keys.length; j++) {
+      var k = keys[j]
       pieData.push({
         name: getKnowledgePointName(k),
         value: parseFloat(mastery[k].avgScore)
       })
     }
-    
+
     knowledgeChart.setOption({
       tooltip: { trigger: 'item' },
       series: [{
-        name: '掌握情况',
+        name: '????',
         type: 'pie',
         radius: ['40%', '70%'],
         data: pieData
       }]
     })
+  }
+
+  var levelDom = document.getElementById('levelChart')
+  if (levelDom) {
+    if (levelChart) levelChart.dispose()
+    levelChart = echarts.init(levelDom)
+
+    var wrongCount = wrongQuestions.value.length
+    var masteryValues = analytics.value && analytics.value.knowledgePointMastery
+      ? Object.values(analytics.value.knowledgePointMastery).map(function(item) { return parseFloat(item.avgScore || 0) })
+      : []
+    var avgMastery = masteryValues.length
+      ? Math.round(masteryValues.reduce(function(sum, val) { return sum + val }, 0) / masteryValues.length)
+      : 0
+    var trendData = analytics.value && analytics.value.scoreTrend ? analytics.value.scoreTrend : []
+    var latestScore = trendData.length ? trendData[trendData.length - 1].score : 0
+
+    levelChart.setOption({
+      radar: {
+        indicator: [
+          { name: '????', max: 100 },
+          { name: '?????', max: 100 },
+          { name: '????', max: 100 }
+        ]
+      },
+      series: [{
+        type: 'radar',
+        data: [{
+          value: [latestScore, avgMastery, Math.max(0, 100 - wrongCount * 10)],
+          areaStyle: { color: 'rgba(103, 194, 58, 0.2)' },
+          lineStyle: { color: '#67C23A' }
+        }]
+      }]
+    })
+  }
+}
+
+function goToWrongQuestions() {
+  if (!studentId.value) return
+  var el = document.getElementById('wrong-questions-section')
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+}
+
+function scrollToKnowledge() {
+  var el = document.getElementById('knowledge-section')
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 }
 

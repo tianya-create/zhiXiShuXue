@@ -4,7 +4,7 @@
       <h2>学习中心</h2>
       <p>今天是 {{ currentDate }}，继续努力学习吧！</p>
     </div>
-    
+
     <el-row :gutter="20" class="stat-cards">
       <el-col :span="6">
         <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
@@ -35,7 +35,30 @@
         </div>
       </el-col>
     </el-row>
-    
+
+    <el-card v-if="newRecommendations.length" class="gradient-card recommend-panel">
+      <template #header>
+        <div class="card-header">
+          <span>新的补练推荐</span>
+          <el-tag type="danger">{{ newRecommendations.length }} 个知识点待处理</el-tag>
+        </div>
+      </template>
+      <div class="recommend-desc">老师刚完成批改，以下知识点根据你的作业结果生成了新的补练建议。</div>
+      <div class="recommend-grid">
+        <div v-for="item in newRecommendations" :key="item.id" class="recommend-card-item">
+          <div class="recommend-card-head">
+            <div class="recommend-card-name">{{ item.name }}</div>
+            <el-tag type="warning" effect="dark">新推荐</el-tag>
+          </div>
+          <div class="recommend-card-meta">
+            <span>错误 {{ item.wrongCount }}</span>
+            <span>掌握度 {{ item.masteryRate }}%</span>
+          </div>
+          <el-button type="danger" @click="goToPractice(item)">立即补练</el-button>
+        </div>
+      </div>
+    </el-card>
+
     <el-row :gutter="20" style="margin-top: 20px;">
       <el-col :span="16">
         <el-card class="gradient-card">
@@ -66,13 +89,13 @@
           </el-table>
         </el-card>
       </el-col>
-      
+
       <el-col :span="8">
         <el-card class="gradient-card">
           <template #header>知识掌握概览</template>
           <div id="knowledgeChart" style="height: 250px;"></div>
         </el-card>
-        
+
         <el-card class="gradient-card" style="margin-top: 20px;">
           <template #header>快捷入口</template>
           <div class="quick-actions">
@@ -112,7 +135,14 @@ var stats = reactive({
 })
 
 var pendingAssignments = ref([])
+var weakPointList = ref([])
 var chart = null
+
+var newRecommendations = computed(function() {
+  return weakPointList.value.filter(function(item) {
+    return !!item.hasNewRecommendation
+  }).slice(0, 3)
+})
 
 onMounted(function() {
   loadData()
@@ -135,27 +165,26 @@ function goToWrongQuestions() {
 }
 
 function loadData() {
-  api.get('/student/assignments', { status: 'pending' }).then(function(res) {
-    if (res.success) {
-      pendingAssignments.value = res.data.slice(0, 5)
-      
-      var pending = 0
-      var completed = 0
-      for (var i = 0; i < res.data.length; i++) {
-        if (res.data[i].submitted) {
-          completed++
-        } else {
-          pending++
-        }
-      }
-      stats.pendingAssignments = pending
-      stats.completedAssignments = completed
+  Promise.all([
+    api.get('/student/assignments', { status: 'pending' }),
+    api.get('/student/weak-points')
+  ]).then(function(results) {
+    var assignmentRes = results[0]
+    var weakPointRes = results[1]
+
+    if (assignmentRes.success) {
+      pendingAssignments.value = assignmentRes.data.slice(0, 5)
+      stats.pendingAssignments = assignmentRes.data.length
     }
-    
-    // 模拟数据
-    stats.avgScore = 76
-    stats.weakPoints = 3
-    
+
+    if (weakPointRes.success) {
+      weakPointList.value = weakPointRes.data || []
+      stats.weakPoints = weakPointList.value.length
+    }
+
+    stats.completedAssignments = 0
+    stats.avgScore = getAverageMastery(weakPointList.value)
+
     return nextTick()
   }).then(function() {
     renderChart()
@@ -164,13 +193,32 @@ function loadData() {
   })
 }
 
+function getAverageMastery(list) {
+  if (!list.length) return 0
+  var total = list.reduce(function(sum, item) {
+    return sum + parseInt(item.masteryRate || 0)
+  }, 0)
+  return Math.round(total / list.length)
+}
+
 function renderChart() {
   var chartDom = document.getElementById('knowledgeChart')
   if (!chartDom) return
-  
+
   if (chart) chart.dispose()
   chart = echarts.init(chartDom)
-  
+
+  var mastered = 0
+  var learning = 0
+  var weak = 0
+
+  weakPointList.value.forEach(function(item) {
+    var rate = parseInt(item.masteryRate || 0)
+    if (rate >= 80) mastered++
+    else if (rate >= 60) learning++
+    else weak++
+  })
+
   chart.setOption({
     tooltip: { trigger: 'item' },
     series: [{
@@ -178,9 +226,9 @@ function renderChart() {
       type: 'pie',
       radius: ['50%', '70%'],
       data: [
-        { value: 60, name: '已掌握', itemStyle: { color: '#67C23A' } },
-        { value: 25, name: '学习中', itemStyle: { color: '#E6A23C' } },
-        { value: 15, name: '薄弱', itemStyle: { color: '#F56C6C' } }
+        { value: mastered, name: '已掌握', itemStyle: { color: '#67C23A' } },
+        { value: learning, name: '学习中', itemStyle: { color: '#E6A23C' } },
+        { value: weak, name: '薄弱', itemStyle: { color: '#F56C6C' } }
       ]
     }]
   })
@@ -190,12 +238,23 @@ function startAssignment(row) {
   router.push('/student/assignment/' + row.id)
 }
 
+function goToPractice(row) {
+  router.push({ path: '/student/practice', query: { kpId: row.id } })
+}
+
 function formatDate(date) {
   return date ? dayjs(date).format('YYYY-MM-DD HH:mm') : '未设置'
 }
 </script>
 
 <style scoped>
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .quick-actions {
   display: flex;
   flex-direction: column;
@@ -204,5 +263,49 @@ function formatDate(date) {
 
 .quick-actions .el-button {
   width: 100%;
+}
+
+.recommend-panel {
+  margin-top: 20px;
+}
+
+.recommend-desc {
+  margin-bottom: 14px;
+  color: #6b7280;
+}
+
+.recommend-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.recommend-card-item {
+  padding: 16px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #fff1f0, #fff7e6);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.recommend-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.recommend-card-name {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.recommend-card-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: #6b7280;
+  font-size: 13px;
 }
 </style>

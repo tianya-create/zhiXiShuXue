@@ -44,7 +44,9 @@ function buildAnswerDetail(answer) {
       correct: item.correct,
       score: manualScore || 0,
       fullScore: question.score || 0,
-      knowledgePoints: question.knowledgePoints || []
+      knowledgePoints: question.knowledgePoints || [],
+      comment: answer.comments && answer.comments[item.questionId] ? answer.comments[item.questionId] : '',
+      correction: answer.corrections && answer.corrections[item.questionId] ? answer.corrections[item.questionId] : ''
     };
   });
 
@@ -59,6 +61,14 @@ function buildAnswerDetail(answer) {
     student,
     questionResults
   };
+}
+
+function buildAccuracyFromQuestionResults(questionResults) {
+  if (!questionResults || questionResults.length === 0) {
+    return 0;
+  }
+  const correctCount = questionResults.filter(item => item.correct).length;
+  return Math.round(correctCount / questionResults.length * 100);
 }
 
 // 配置文件上传
@@ -415,6 +425,25 @@ router.delete('/papers/:id', (req, res) => {
 
 // ========== 题目管理 ==========
 
+// 获取题库题目列表
+router.get('/questions', (req, res) => {
+  try {
+    const { type, difficulty } = req.query;
+
+    let questions = db.find('questions');
+
+    if (type) {
+      questions = questions.filter(q => q.type === type);
+    }
+    if (difficulty) {
+      questions = questions.filter(q => q.difficulty === difficulty);
+    }
+
+    res.json({ success: true, data: questions });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 // 添加题目
 router.post('/questions', (req, res) => {
   try {
@@ -501,28 +530,97 @@ router.delete('/questions/:id', (req, res) => {
 router.post('/assignments', (req, res) => {
   try {
     const teacherId = req.headers['x-user-id'];
-    const { title, paperId, classId, studentIds, deadline, type, level } = req.body;
+    const { title, paperId, classId, studentIds, deadline, type, level, levels, questionIds } = req.body;
 
-    if (!title || !paperId || !classId) {
-      return res.status(400).json({ success: false, message: '参数不完整' });
+    if (!title || !classId) {
+      return res.status(400).json({ success: false, message: '作业名称和班级不能为空' });
+    }
+
+    const normalizedQuestionIds = Array.isArray(questionIds)
+      ? [...new Set(questionIds.filter(Boolean))]
+      : [];
+
+    const normalizedLevels = Array.isArray(levels)
+      ? [...new Set(levels.filter(Boolean))]
+      : (level ? [level] : ['strong']);
+
+    if (!paperId && normalizedQuestionIds.length === 0) {
+      return res.status(400).json({ success: false, message: '请选择试卷或至少选择一道题目' });
+    }
+
+    if (normalizedLevels.length === 0) {
+      return res.status(400).json({ success: false, message: '请至少选择一个作业层次' });
+    }
+
+    let effectivePaperId = paperId;
+
+    if (!effectivePaperId) {
+      const selectedQuestions = normalizedQuestionIds
+        .map(questionId => db.findById('questions', questionId))
+        .filter(question => question);
+
+      if (selectedQuestions.length !== normalizedQuestionIds.length) {
+        return res.status(400).json({ success: false, message: '所选题目不存在或已失效' });
+      }
+
+      const generatedPaper = db.create('papers', {
+        title: `${title}-题目集`,
+        teacherId,
+        classId,
+        filePath: '',
+        fileName: '',
+        fileSize: 0,
+        fileType: 'manual',
+        status: 'completed',
+        questions: normalizedQuestionIds,
+        source: 'question-bank'
+      });
+
+      effectivePaperId = generatedPaper.id;
     }
 
     const assignment = db.create('assignments', {
       title,
-      paperId,
+      paperId: effectivePaperId,
       classId,
       teacherId,
       studentIds: studentIds || [],
       deadline,
-      type: type || 'homework', // homework, exam
-      level: level || 'normal', // weak, normal, strong (分层作业)
+      type: type || 'homework',
+      level: normalizedLevels[0],
+      levels: normalizedLevels,
       status: 'published',
       createdAt: new Date().toISOString()
     });
 
-    db.addLog(teacherId, 'CREATE_ASSIGNMENT', { assignmentId: assignment.id, title });
+    db.addLog(teacherId, 'CREATE_ASSIGNMENT', {
+      assignmentId: assignment.id,
+      title,
+      paperId: effectivePaperId,
+      questionCount: normalizedQuestionIds.length,
+      levels: normalizedLevels
+    });
 
     res.json({ success: true, data: assignment, message: '作业发布成功' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+// 获取题库题目列表
+router.get('/questions', (req, res) => {
+  try {
+    const { type, difficulty } = req.query;
+
+    let questions = db.find('questions');
+
+    if (type) {
+      questions = questions.filter(q => q.type === type);
+    }
+    if (difficulty) {
+      questions = questions.filter(q => q.difficulty === difficulty);
+    }
+
+    res.json({ success: true, data: questions });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -680,7 +778,7 @@ router.get('/answers/:id', (req, res) => {
 router.post('/answers/:id/grade', (req, res) => {
   try {
     const { id } = req.params;
-    const { scores, comments } = req.body;
+    const { scores, comments, corrections } = req.body;
     const teacherId = req.headers['x-user-id'];
 
     const answer = db.findById('answers', id);
@@ -688,13 +786,27 @@ router.post('/answers/:id/grade', (req, res) => {
       return res.status(404).json({ success: false, message: '答题记录不存在' });
     }
 
-    // 计算总分
-    const totalScore = Object.values(scores).reduce((sum, s) => sum + s, 0);
+    const nextQuestionResults = (answer.questionResults || []).map(item => {
+      const manualScore = scores && scores[item.questionId] !== undefined ? Number(scores[item.questionId]) : item.score;
+      const question = db.findById('questions', item.questionId);
+      const fullScore = question && question.score ? question.score : 0;
+      const isObjective = question && (question.type === 'choice' || question.type === 'fill');
 
-    // 更新答题记录
+      return {
+        ...item,
+        score: Math.max(0, Math.min(fullScore, manualScore || 0)),
+        correct: isObjective ? item.correct : (manualScore || 0) >= fullScore * 0.6,
+        correction: corrections && corrections[item.questionId] ? corrections[item.questionId] : ''
+      };
+    });
+
+    const totalScore = nextQuestionResults.reduce((sum, item) => sum + (item.score || 0), 0);
+
     const updated = db.updateById('answers', id, {
-      scores,
-      comments,
+      scores: scores || {},
+      comments: comments || {},
+      corrections: corrections || {},
+      questionResults: nextQuestionResults,
       totalScore,
       gradedBy: teacherId,
       gradedAt: new Date().toISOString(),
@@ -707,9 +819,35 @@ router.post('/answers/:id/grade', (req, res) => {
   }
 });
 
-// ========== 学情分析 ==========
+router.get('/answers/export/excel', (req, res) => {
+  try {
+    const rows = db.find('answers').map(answer => {
+      const assignment = db.findById('assignments', answer.assignmentId);
+      const student = db.findById('students', answer.studentId) || db.findOne('students', { userId: answer.studentId });
+      const accuracy = buildAccuracyFromQuestionResults(answer.questionResults || []);
 
-// 班级学情统计
+      return [
+        student ? student.name : '????',
+        assignment ? assignment.title : (answer.title || '????'),
+        answer.recordType || 'homework',
+        answer.status || '',
+        String(answer.totalScore || 0),
+        String(accuracy) + '%',
+        answer.submittedAt || ''
+      ].join(',');
+    });
+
+    const header = '??,??/??,????,??,??,???,????';
+    const csv = [header].concat(rows).join('\n');
+
+    res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename=grading-results.csv');
+    res.send('\uFEFF' + csv);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 router.get('/analytics/class/:classId', (req, res) => {
   try {
     const { classId } = req.params;

@@ -17,6 +17,8 @@ const db = {
   assignments: [],
   answers: [],
   knowledgePoints: [],
+  learningRecords: [],
+  masteredWrongQuestions: [],
   logs: [],
   settings: {}
 };
@@ -143,10 +145,11 @@ function initializeData() {
 
   // 系统设置
   db.settings = {
-    ocrApiKey: '',
-    ocrApiSecret: '',
-    llmApiKey: '',
-    llmApiEndpoint: '',
+    ocrApiKey: process.env.OCR_API_KEY || '',
+    ocrApiSecret: process.env.OCR_API_SECRET || '',
+    llmApiKey: process.env.LLM_API_KEY || '',
+    llmApiEndpoint: process.env.LLM_API_ENDPOINT || '',
+    llmModel: process.env.LLM_MODEL || '',
     maxUploadSize: 10, // MB
     allowedFileTypes: ['jpg', 'jpeg', 'png', 'pdf'],
     systemName: '智慧教育平台',
@@ -719,6 +722,14 @@ class Database {
       details,
       timestamp: new Date().toISOString()
     });
+  }
+
+  get settings() {
+    return this.data.settings;
+  }
+
+  set settings(value) {
+    this.data.settings = value;
   }
 }
 
