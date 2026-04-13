@@ -232,6 +232,10 @@ var router = createRouter({
 
 // 路由守卫
 router.beforeEach(function(to, from, next) {
+  if (to.fullPath === from.fullPath) {
+    next(false)
+    return
+  }
   // 设置页面标题
   var title = to.meta.title
   if (title) {

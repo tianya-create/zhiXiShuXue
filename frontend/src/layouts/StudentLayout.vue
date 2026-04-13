@@ -1,5 +1,5 @@
 <template>
-  <div class="layout-container">
+  <div class="layout-container student-theme-shell">
     <!-- 侧边栏 -->
     <div class="sidebar">
       <div class="logo">
@@ -27,8 +27,8 @@
           <span class="menu-text">知识图谱</span>
         </el-menu-item>
         
-        <el-menu-item index="/student/weak-points">
-          <el-icon><Warning /></el-icon>
+          <el-menu-item index="/student/weak-points">
+          <el-icon><WarningFilled /></el-icon>
           <span class="menu-text">薄弱知识点</span>
         </el-menu-item>
         
@@ -112,13 +112,21 @@ function handleCommand(command) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
       ElMessage.success('已退出登录')
-      window.location.href = '/login'
+      router.replace('/login')
     }).catch(function() {})
   }
 }
 </script>
 
 <style scoped>
+.student-theme-shell :deep(.el-button--primary) {
+  color: #ffffff;
+}
+
+.student-theme-shell :deep(.el-button--primary span) {
+  color: #ffffff;
+}
+
 .logo {
   height: 64px;
   display: flex;

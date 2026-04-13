@@ -259,6 +259,27 @@ function initializeData() {
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
   const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
 
+  // 创建试卷数据
+  db.papers.push({
+    id: 'paper-001',
+    title: '第一次测试卷',
+    teacherId: teacherId,
+    classId: classId,
+    questions: ['q1', 'q2', 'q3', 'q4', 'q5'],
+    createdAt: twoDaysAgo,
+    updatedAt: twoDaysAgo
+  });
+
+  db.papers.push({
+    id: 'paper-002',
+    title: '第二次测试卷',
+    teacherId: teacherId,
+    classId: classId,
+    questions: ['q1', 'q2', 'q3', 'q4', 'q5'],
+    createdAt: yesterday,
+    updatedAt: yesterday
+  });
+
   // 创建模拟作业
   const assignment1 = {
     id: 'assignment-001',

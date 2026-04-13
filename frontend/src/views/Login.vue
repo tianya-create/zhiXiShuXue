@@ -135,12 +135,15 @@ function handleLogin() {
         }
         
         // 如果有重定向地址
-        if (route.query.redirect) {
-          targetPath = route.query.redirect
+        if (route.query.redirect && String(route.query.redirect) !== '/login') {
+          targetPath = String(route.query.redirect)
         }
-        
-        // 使用Vue Router跳转
-        router.push(targetPath)
+
+        if (router.currentRoute.value.fullPath === targetPath) {
+          return
+        }
+
+        router.replace(targetPath)
       } else {
         ElMessage.error(res.message || '登录失败')
       }

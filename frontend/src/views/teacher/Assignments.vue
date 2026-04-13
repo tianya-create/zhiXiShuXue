@@ -144,10 +144,81 @@
           </el-table-column>
           <el-table-column prop="status" label="状态" width="100" />
           <el-table-column prop="totalScore" label="得分" width="100" />
+          <el-table-column label="操作" width="140">
+            <template #default="scope">
+              <el-button type="primary" link @click="viewAnswerDetail(scope.row)">
+                查看答题详情
+              </el-button>
+            </template>
+          </el-table-column>
         </el-table>
+        <div v-if="selectedAnswerDetail" class="answer-detail-panel">
+  <div class="detail-subtitle">答题明细</div>
+
+  <el-alert
+    :title="`学生 ${selectedAnswerDetail.studentId} 的答题详情`"
+    type="info"
+    :closable="false"
+    show-icon
+    class="answer-detail-alert"
+  />
+
+  <div class="answer-question-list">
+    <div
+      v-for="item in selectedAnswerDetail.questionResults || []"
+      :key="item.questionId"
+      class="answer-question-card"
+    >
+      <div class="answer-question-head">
+        <div class="answer-question-type">
+          <el-tag size="small" effect="plain">
+            {{ getQuestionTypeText(item.questionType) }}
+          </el-tag>
+          <el-tag :type="item.correct ? 'success' : 'danger'" size="small">
+            {{ item.correct ? '正确' : '错误' }}
+          </el-tag>
+        </div>
+        <div class="answer-question-score">
+          {{ item.score }}/{{ item.fullScore }} 分
+        </div>
+      </div>
+
+      <div class="answer-question-content">
+        {{ item.content }}
+      </div>
+
+      <div
+        v-if="item.options && item.options.length"
+        class="answer-option-list"
+      >
+        <div
+          v-for="(option, index) in item.options"
+          :key="index"
+          class="answer-option-item"
+        >
+          {{ String.fromCharCode(65 + index) }}. {{ option }}
+        </div>
+      </div>
+
+      <div class="answer-meta-list">
+        <div><strong>正确答案：</strong>{{ item.standardAnswer || '-' }}</div>
+        <div><strong>学生答案：</strong>{{ item.studentAnswer || '-' }}</div>
+        <div><strong>知识点：</strong>{{ (item.knowledgePoints || []).join('、') || '-' }}</div>
+      </div>
+
+      <div v-if="item.comment" class="teacher-comment">
+        <strong>教师评语：</strong>{{ item.comment }}
+      </div>
+
+      <div v-if="item.correction" class="teacher-comment">
+        <strong>订正建议：</strong>{{ item.correction }}
+      </div>
+    </div>
+  </div>
+</div>
       </div>
       <template #footer>
-        <el-button @click="detailVisible = false">关闭</el-button>
+        <el-button @click="closeDetailDialog">关闭</el-button>
       </template>
     </el-dialog>
   </div>
@@ -156,6 +227,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import dayjs from 'dayjs'
 
@@ -168,6 +240,7 @@ var papers = ref([])
 var classes = ref([])
 var questionBank = ref([])
 var currentAssignment = ref(null)
+var selectedAnswerDetail = ref(null)
 
 var form = reactive({
   title: '',
@@ -195,17 +268,17 @@ function loadData() {
     api.get('/teacher/papers', { pageSize: 100 }),
     api.get('/teacher/classes')
   ])
-  .then(function(results) {
-    if (results[0].success) assignments.value = results[0].data
-    if (results[1].success) papers.value = results[1].data.data
-    if (results[2].success) classes.value = results[2].data
-  })
-  .catch(function() {
-    ElMessage.error('基础数据加载失败')
-  })
-  .finally(function() {
-    loading.value = false
-  })
+    .then(function(results) {
+      if (results[0].success) assignments.value = results[0].data
+      if (results[1].success) papers.value = results[1].data.data
+      if (results[2].success) classes.value = results[2].data
+    })
+    .catch(function() {
+      ElMessage.error('基础数据加载失败')
+    })
+    .finally(function() {
+      loading.value = false
+    })
 
   api.get('/teacher/questions')
     .then(function(res) {
@@ -270,12 +343,23 @@ function viewAssignment(row) {
     .then(function(res) {
       if (res.success) {
         currentAssignment.value = res.data
+        selectedAnswerDetail.value =
+          res.data.answers && res.data.answers.length ? res.data.answers[0] : null
         detailVisible.value = true
       }
     })
     .catch(function() {
       ElMessage.error('加载作业详情失败')
     })
+}
+
+function viewAnswerDetail(answerRow) {
+  selectedAnswerDetail.value = answerRow
+}
+
+function closeDetailDialog() {
+  detailVisible.value = false
+  selectedAnswerDetail.value = null
 }
 
 function deleteAssignment(row) {
@@ -325,18 +409,11 @@ function getLevelsText(levels) {
   }).join('、')
 }
 
-function getLevelType(level) {
-  if (level === 'weak') return 'danger'
-  if (level === 'normal') return 'warning'
-  if (level === 'strong') return 'success'
-  return 'info'
-}
-
-function getLevelText(level) {
-  if (level === 'weak') return '薄弱层'
-  if (level === 'normal') return '普通层'
-  if (level === 'strong') return '优秀层'
-  return '未知'
+function getQuestionTypeText(type) {
+  if (type === 'choice') return '选择题'
+  if (type === 'fill') return '填空题'
+  if (type === 'shortAnswer') return '简答题'
+  return '题目'
 }
 
 function formatDate(date) {
@@ -365,5 +442,81 @@ function formatDate(date) {
   margin-top: 8px;
   color: #909399;
   font-size: 12px;
+}
+
+.answer-detail-panel {
+  margin-top: 24px;
+}
+
+.answer-detail-alert {
+  margin-bottom: 16px;
+}
+
+.answer-question-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.answer-question-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 16px;
+  background: linear-gradient(135deg, #ffffff, #f8fbff);
+}
+
+.answer-question-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.answer-question-type {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.answer-question-score {
+  font-weight: 700;
+  color: #2563eb;
+}
+
+.answer-question-content {
+  margin-top: 12px;
+  color: #111827;
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.answer-option-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.answer-option-item {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #374151;
+}
+
+.answer-meta-list {
+  margin-top: 14px;
+  display: grid;
+  gap: 8px;
+  color: #4b5563;
+}
+
+.teacher-comment {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f9fafb;
+  color: #374151;
 }
 </style>

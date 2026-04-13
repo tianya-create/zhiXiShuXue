@@ -115,7 +115,7 @@ function handleCommand(command) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
       ElMessage.success('已退出登录')
-      window.location.href = '/login'
+      router.replace('/login')
     }).catch(function() {})
   }
 }

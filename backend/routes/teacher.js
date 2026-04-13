@@ -23,30 +23,118 @@ function getTeacherByUserId(userId) {
   return db.findById('teachers', userId) || db.findOne('teachers', { userId });
 }
 
+function normalizeText(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function getOptionLabel(index) {
+  return String.fromCharCode(65 + index);
+}
+
+function normalizeChoiceDisplay(question, rawAnswer) {
+  const answerText = String(rawAnswer || '').trim();
+  const normalizedAnswer = normalizeText(answerText);
+  const options = Array.isArray(question.options) ? question.options : [];
+
+  if (!normalizedAnswer) {
+    return {
+      raw: answerText,
+      label: '',
+      content: '',
+      display: '-'
+    };
+  }
+
+  const byLabelIndex = options.findIndex((option, index) => {
+    return normalizeText(getOptionLabel(index)) === normalizedAnswer;
+  });
+
+  if (byLabelIndex >= 0) {
+    const label = getOptionLabel(byLabelIndex);
+    const content = options[byLabelIndex];
+    return {
+      raw: answerText,
+      label,
+      content,
+      display: `${label}（${content}）`
+    };
+  }
+
+  const byContentIndex = options.findIndex((option) => {
+    return normalizeText(option) === normalizedAnswer;
+  });
+
+  if (byContentIndex >= 0) {
+    const label = getOptionLabel(byContentIndex);
+    const content = options[byContentIndex];
+    return {
+      raw: answerText,
+      label,
+      content,
+      display: `${label}（${content}）`
+    };
+  }
+
+  return {
+    raw: answerText,
+    label: answerText.toUpperCase(),
+    content: answerText,
+    display: answerText
+  };
+}
+
 function buildAnswerDetail(answer) {
   const paper = db.findById('papers', answer.paperId);
   const assignment = db.findById('assignments', answer.assignmentId);
-  const student = db.findById('students', answer.studentId) || db.findOne('students', { userId: answer.studentId });
+  const student =
+    db.findById('students', answer.studentId) ||
+    db.findOne('students', { userId: answer.studentId });
 
-  const questionResults = (answer.questionResults || []).map(item => {
+  const questionResults = (answer.questionResults || []).map((item) => {
     const question = db.findById('questions', item.questionId) || {};
-    const manualScore = answer.scores && answer.scores[item.questionId] !== undefined
-      ? answer.scores[item.questionId]
-      : item.score;
+    const manualScore =
+      answer.scores && answer.scores[item.questionId] !== undefined
+        ? answer.scores[item.questionId]
+        : item.score;
+
+    const isChoice = question.type === 'choice';
+    const standardAnswerInfo = isChoice
+      ? normalizeChoiceDisplay(question, question.answer)
+      : null;
+    const studentAnswerInfo = isChoice
+      ? normalizeChoiceDisplay(question, item.answer)
+      : null;
 
     return {
       questionId: item.questionId,
       questionType: question.type,
       content: question.content,
       options: question.options || [],
-      standardAnswer: question.answer,
-      studentAnswer: item.answer,
+
+      standardAnswer: isChoice ? standardAnswerInfo.display : question.answer,
+      studentAnswer: isChoice ? studentAnswerInfo.display : item.answer,
+
+      standardAnswerRaw: question.answer,
+      studentAnswerRaw: item.answer,
+
+      standardAnswerLabel: isChoice ? standardAnswerInfo.label : '',
+      standardAnswerContent: isChoice ? standardAnswerInfo.content : '',
+
+      studentAnswerLabel: isChoice ? studentAnswerInfo.label : '',
+      studentAnswerContent: isChoice ? studentAnswerInfo.content : '',
+
       correct: item.correct,
       score: manualScore || 0,
       fullScore: question.score || 0,
       knowledgePoints: question.knowledgePoints || [],
-      comment: answer.comments && answer.comments[item.questionId] ? answer.comments[item.questionId] : '',
-      correction: answer.corrections && answer.corrections[item.questionId] ? answer.corrections[item.questionId] : ''
+      comment:
+        answer.comments && answer.comments[item.questionId]
+          ? answer.comments[item.questionId]
+          : '',
+      correction:
+        answer.corrections && answer.corrections[item.questionId]
+          ? answer.corrections[item.questionId]
+          : ''
     };
   });
 
@@ -67,8 +155,9 @@ function buildAccuracyFromQuestionResults(questionResults) {
   if (!questionResults || questionResults.length === 0) {
     return 0;
   }
-  const correctCount = questionResults.filter(item => item.correct).length;
-  return Math.round(correctCount / questionResults.length * 100);
+
+  const correctCount = questionResults.filter((item) => item.correct).length;
+  return Math.round((correctCount / questionResults.length) * 100);
 }
 
 // 配置文件上传
@@ -683,6 +772,15 @@ router.get('/assignments/:id', (req, res) => {
 
     const paper = db.findById('papers', assignment.paperId);
     const classInfo = db.findById('classes', assignment.classId);
+    const answerDetails = db.find('answers')
+      .filter(a => a.assignmentId === assignment.id)
+      .map(a => {
+        const detail = buildAnswerDetail(a);
+        return {
+          ...detail.answer,
+          studentName: detail.student ? detail.student.name : '未知学生'
+        };
+      });
 
     res.json({
       success: true,
@@ -690,7 +788,7 @@ router.get('/assignments/:id', (req, res) => {
         ...assignment,
         paper,
         classInfo,
-        answers: db.find('answers').filter(a => a.assignmentId === assignment.id)
+        answers: answerDetails
       }
     });
   } catch (error) {
@@ -821,14 +919,29 @@ router.post('/answers/:id/grade', (req, res) => {
 
 router.get('/answers/export/excel', (req, res) => {
   try {
-    const rows = db.find('answers').map(answer => {
+    const answerList = db.find('answers').sort((a, b) => {
+      const studentA = db.findById('students', a.studentId) || db.findOne('students', { userId: a.studentId });
+      const studentB = db.findById('students', b.studentId) || db.findOne('students', { userId: b.studentId });
+      const nameA = studentA ? studentA.name : '';
+      const nameB = studentB ? studentB.name : '';
+      if (nameA !== nameB) return nameA.localeCompare(nameB, 'zh-CN');
+      return new Date(a.submittedAt || 0) - new Date(b.submittedAt || 0);
+    });
+
+    const rows = answerList.map((answer, index) => {
       const assignment = db.findById('assignments', answer.assignmentId);
       const student = db.findById('students', answer.studentId) || db.findOne('students', { userId: answer.studentId });
       const accuracy = buildAccuracyFromQuestionResults(answer.questionResults || []);
+      const studentName = student ? student.name : '未知学生';
+      const studentNo = student ? student.studentNo || '' : '';
+      const taskTitle = assignment ? assignment.title : (answer.title || '练习记录');
+      const testLabel = '第' + (index + 1) + '次记录';
 
       return [
-        student ? student.name : '????',
-        assignment ? assignment.title : (answer.title || '????'),
+        studentName,
+        studentNo,
+        testLabel,
+        taskTitle,
         answer.recordType || 'homework',
         answer.status || '',
         String(answer.totalScore || 0),
@@ -837,7 +950,7 @@ router.get('/answers/export/excel', (req, res) => {
       ].join(',');
     });
 
-    const header = '??,??/??,????,??,??,???,????';
+    const header = '学生姓名,学号,测试序号,作业/练习名称,记录类型,状态,得分,正确率,提交时间';
     const csv = [header].concat(rows).join('\n');
 
     res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');

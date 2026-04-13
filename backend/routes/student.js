@@ -21,6 +21,65 @@ function getOptionLabel(index) {
   return String.fromCharCode(65 + index);
 }
 
+function normalizeChoiceAnswer(question, rawAnswer) {
+  const answerText = String(rawAnswer || '').trim();
+  const normalizedAnswer = normalizeText(answerText);
+  const options = Array.isArray(question.options) ? question.options : [];
+
+  if (!normalizedAnswer) {
+    return {
+      raw: answerText,
+      normalized: '',
+      label: '',
+      content: ''
+    };
+  }
+
+  const optionIndexByLabel = options.findIndex((option, index) => {
+    return normalizeText(getOptionLabel(index)) === normalizedAnswer;
+  });
+
+  if (optionIndexByLabel >= 0) {
+    return {
+      raw: answerText,
+      normalized: normalizeText(getOptionLabel(optionIndexByLabel)),
+      label: getOptionLabel(optionIndexByLabel),
+      content: options[optionIndexByLabel]
+    };
+  }
+
+  const optionIndexByContent = options.findIndex(option => {
+    return normalizeText(option) === normalizedAnswer;
+  });
+
+  if (optionIndexByContent >= 0) {
+    return {
+      raw: answerText,
+      normalized: normalizeText(getOptionLabel(optionIndexByContent)),
+      label: getOptionLabel(optionIndexByContent),
+      content: options[optionIndexByContent]
+    };
+  }
+
+  return {
+    raw: answerText,
+    normalized: normalizedAnswer,
+    label: answerText.toUpperCase(),
+    content: answerText
+  };
+}
+
+function buildChoiceDisplay(question, rawAnswer) {
+  const info = normalizeChoiceAnswer(question, rawAnswer);
+  if (!info.normalized) {
+    return '-';
+  }
+  if (info.label && info.content) {
+    return `${info.label}（${info.content}）`;
+  }
+  return info.content || info.label || '-';
+}
+
 function evaluateQuestion(question, studentAnswer) {
   const answerText = String(studentAnswer || '').trim();
   let score = 0;
@@ -28,12 +87,13 @@ function evaluateQuestion(question, studentAnswer) {
   let hasSubjective = false;
 
   if (question.type === 'choice') {
-    const normalizedStudentAnswer = normalizeText(answerText);
-    const normalizedStandardAnswer = normalizeText(question.answer);
-    const optionIndex = (question.options || []).findIndex(option => normalizeText(option) === normalizedStudentAnswer);
-    const optionLabel = optionIndex >= 0 ? normalizeText(getOptionLabel(optionIndex)) : '';
+    const normalizedStudent = normalizeChoiceAnswer(question, answerText);
+    const normalizedStandard = normalizeChoiceAnswer(question, question.answer);
 
-    correct = normalizedStudentAnswer === normalizedStandardAnswer || (!!optionLabel && optionLabel === normalizedStandardAnswer);
+    correct =
+      !!normalizedStudent.normalized &&
+      normalizedStudent.normalized === normalizedStandard.normalized;
+
     score = correct ? (question.score || 0) : 0;
   } else if (question.type === 'fill') {
     correct = normalizeText(answerText) === normalizeText(question.answer);
@@ -48,6 +108,21 @@ function evaluateQuestion(question, studentAnswer) {
     score,
     hasSubjective
   };
+}
+
+function deriveKnowledgePointId(question, fallbackKnowledgePointId) {
+  const direct = Array.isArray(question && question.knowledgePoints) && question.knowledgePoints.length
+    ? question.knowledgePoints[0]
+    : '';
+
+  if (direct) return direct;
+
+  const fallbackText = String((question && question.content) || '').toLowerCase();
+  const allPoints = db.find('knowledgePoints');
+  const matched = allPoints.find(item => fallbackText.includes(String(item.name || '').toLowerCase()));
+  if (matched) return matched.id;
+
+  return fallbackKnowledgePointId || '';
 }
 
 function calculateAnswerPayload(questionIds, questionAnswers) {
@@ -109,6 +184,7 @@ function getWrongQuestionEntries(studentId) {
 
       const existing = wrongQuestionMap.get(qr.questionId);
       const wrongHistory = existing && existing.wrongHistory ? existing.wrongHistory.slice() : [];
+
       wrongHistory.push({
         answerRecordId: answer.id,
         submittedAt: answer.submittedAt,
@@ -117,17 +193,27 @@ function getWrongQuestionEntries(studentId) {
       });
 
       const latestSubmittedAt = answer.submittedAt || answer.createdAt;
+      const displayAnswer = question.type === 'choice'
+        ? buildChoiceDisplay(question, qr.answer)
+        : (qr.answer || '');
+      const displayCorrectAnswer = question.type === 'choice'
+        ? buildChoiceDisplay(question, question.answer)
+        : (question.answer || '');
+
       if (!existing || new Date(latestSubmittedAt) >= new Date(existing.submittedAt || existing.createdAt || 0)) {
         wrongQuestionMap.set(qr.questionId, {
           ...question,
           studentAnswer: qr.answer,
+          studentAnswerDisplay: displayAnswer,
+          answerDisplay: displayCorrectAnswer,
           answerRecordId: answer.id,
           submittedAt: latestSubmittedAt,
           latestSourceType: answer.recordType || 'homework',
           wrongHistory,
           wrongCount: wrongHistory.length,
           latestPracticeStatus: answer.practiceStatus || null,
-          mastered: false
+          mastered: false,
+          note: existing && existing.note ? existing.note : ''
         });
       } else {
         existing.wrongHistory = wrongHistory;
@@ -140,655 +226,522 @@ function getWrongQuestionEntries(studentId) {
   masteredRecords.forEach(item => {
     const target = wrongQuestionMap.get(item.questionId);
     if (target) {
-      target.mastered = true;
-      target.masteredAt = item.masteredAt;
+      target.mastered = !!item.masteredAt;
+      if (item.note) {
+        target.note = item.note;
+      }
     }
   });
 
-  return Array.from(wrongQuestionMap.values()).sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
+  return Array.from(wrongQuestionMap.values())
+    .sort((a, b) => new Date(b.submittedAt || b.createdAt || 0) - new Date(a.submittedAt || a.createdAt || 0));
 }
 
-function buildLearningRecord(record) {
-  const knowledgePoint = record.knowledgePointId ? db.findById('knowledgePoints', record.knowledgePointId) : null;
-  const assignment = record.assignmentId ? db.findById('assignments', record.assignmentId) : null;
-  const paper = record.paperId ? db.findById('papers', record.paperId) : null;
-
-  return {
-    ...record,
-    knowledgePointName: knowledgePoint ? knowledgePoint.name : '',
-    assignmentTitle: assignment ? assignment.title : '',
-    paperTitle: paper ? paper.title : ''
-  };
+function markWrongQuestionAsActive(studentId, questionId) {
+  const existed = db.findOne('masteredWrongQuestions', { studentId, questionId });
+  if (existed) {
+    db.delete('masteredWrongQuestions', { studentId, questionId });
+  }
 }
 
-function getMasteryLabel(rate) {
-  if (rate >= 80) return '已掌握';
-  if (rate >= 60) return '学习中';
-  return '薄弱';
+function createLearningRecord(payload) {
+  return db.create('learningRecords', payload);
 }
 
-function getKnowledgePointExamples(knowledgePointId) {
-  return db.find('questions')
-    .filter(question => Array.isArray(question.knowledgePoints) && question.knowledgePoints.includes(knowledgePointId))
-    .slice(0, 3)
-    .map(question => ({
-      id: question.id,
-      type: question.type,
-      content: question.content,
-      difficulty: question.difficulty,
-      answer: question.answer,
-      options: question.options || [],
-      knowledgePoints: question.knowledgePoints || []
-    }));
-}
-
-function buildChatPracticeData(studentId, knowledgePointId) {
-  const knowledgePoint = db.findById('knowledgePoints', knowledgePointId);
-  const wrongQuestions = getWrongQuestionEntries(studentId)
-    .filter(item => (item.knowledgePoints || []).includes(knowledgePointId));
-  const answerRecords = db.find('answers').filter(answer => answer.studentId === studentId);
-  const practicedQuestionIds = new Set();
-  const correctQuestionIds = new Set();
-
-  answerRecords.forEach(answer => {
-    (answer.questionResults || []).forEach(result => {
-      practicedQuestionIds.add(result.questionId);
-      if (result.correct) {
-        correctQuestionIds.add(result.questionId);
-      }
-    });
+function buildPracticeKnowledgePointChanges(practiceQuestions, questionResults, targetKnowledgePointId) {
+  const questionMap = {};
+  practiceQuestions.forEach(question => {
+    questionMap[question.id] = question;
   });
 
-  const wrongQuestionIdSet = new Set(wrongQuestions.map(item => item.id));
-  const difficultyOrder = { easy: 1, medium: 2, hard: 3 };
+  const summary = {};
+  questionResults.forEach(result => {
+    const question = questionMap[result.questionId];
+    if (!question) return;
 
-  const candidateQuestions = db.find('questions')
-    .filter(question => Array.isArray(question.knowledgePoints) && question.knowledgePoints.includes(knowledgePointId))
-    .map(question => ({
-      id: question.id,
-      type: question.type,
-      difficulty: question.difficulty,
-      content: question.content,
-      answer: question.answer,
-      options: question.options || [],
-      knowledgePoints: question.knowledgePoints || [],
-      priority: wrongQuestionIdSet.has(question.id) ? 0 : (practicedQuestionIds.has(question.id) ? 2 : 1),
-      practiced: practicedQuestionIds.has(question.id),
-      correct: correctQuestionIds.has(question.id),
-      difficultyRank: difficultyOrder[question.difficulty] || 99
-    }))
-    .sort((a, b) => {
-      if (a.priority !== b.priority) return a.priority - b.priority;
-      if (a.difficultyRank !== b.difficultyRank) return a.difficultyRank - b.difficultyRank;
-      if (a.practiced !== b.practiced) return a.practiced ? 1 : -1;
-      if (a.correct !== b.correct) return a.correct ? 1 : -1;
-      return String(a.id).localeCompare(String(b.id));
-    })
-    .slice(0, 10)
-    .map(question => ({
-      id: question.id,
-      type: question.type,
-      difficulty: question.difficulty,
-      content: question.content,
-      answer: question.answer,
-      options: question.options || [],
-      knowledgePoints: question.knowledgePoints || []
-    }));
+    const kpIds = Array.isArray(question.knowledgePoints) ? question.knowledgePoints : [];
+    kpIds.forEach(kpId => {
+      if (targetKnowledgePointId && kpId !== targetKnowledgePointId) return;
 
-  const openingMessage = knowledgePoint
-    ? '开始“' + knowledgePoint.name + '”补练。系统会优先推荐你做错过的同知识点题目，其次推荐未做过的题目，并按由易到难排列。'
-    : '开始知识点补练。系统会优先推荐相关错题与未做过题目。';
-
-  const relatedKnowledgePointIds = new Set([knowledgePointId]);
-  wrongQuestions.forEach(item => {
-    (item.knowledgePoints || []).forEach(kpId => relatedKnowledgePointIds.add(kpId));
-  });
-  candidateQuestions.forEach(question => {
-    (question.knowledgePoints || []).forEach(kpId => relatedKnowledgePointIds.add(kpId));
-  });
-
-  const relatedKnowledgePoints = Array.from(relatedKnowledgePointIds)
-    .map(kpId => {
-      const item = db.findById('knowledgePoints', kpId);
-      if (!item) return null;
-      return {
-        id: item.id,
-        name: item.name,
-        description: item.description || ''
-      };
-    })
-    .filter(Boolean);
-
-  return {
-    mode: 'chat-practice',
-    openingMessage,
-    knowledgePoint: knowledgePoint ? {
-      id: knowledgePoint.id,
-      name: knowledgePoint.name,
-      description: knowledgePoint.description || ''
-    } : null,
-    relatedKnowledgePoints,
-    wrongQuestions: wrongQuestions.map(item => ({
-      id: item.id,
-      content: item.content,
-      studentAnswer: item.studentAnswer,
-      answer: item.answer,
-      wrongCount: item.wrongCount,
-      knowledgePoints: item.knowledgePoints || []
-    })),
-    candidateQuestions
-  };
-}
-
-function buildPracticeKnowledgePointChanges(questions, questionResults, knowledgePointId) {
-  const map = {};
-
-  questions.forEach(question => {
-    (question.knowledgePoints || []).forEach(kpId => {
-      if (!map[kpId]) {
+      if (!summary[kpId]) {
         const kp = db.findById('knowledgePoints', kpId);
-        map[kpId] = {
+        summary[kpId] = {
           knowledgePointId: kpId,
           knowledgePointName: kp ? kp.name : kpId,
           questionCount: 0,
           correctCount: 0,
-          wrongCount: 0,
-          isInitialWeakPoint: kpId === knowledgePointId
+          wrongCount: 0
         };
       }
-      map[kpId].questionCount += 1;
-    });
-  });
 
-  questionResults.forEach(result => {
-    const question = questions.find(item => item.id === result.questionId);
-    if (!question) return;
-
-    (question.knowledgePoints || []).forEach(kpId => {
-      if (!map[kpId]) return;
+      summary[kpId].questionCount += 1;
       if (result.correct) {
-        map[kpId].correctCount += 1;
+        summary[kpId].correctCount += 1;
       } else {
-        map[kpId].wrongCount += 1;
+        summary[kpId].wrongCount += 1;
       }
     });
   });
 
-  return Object.values(map).map(item => {
+  return Object.values(summary).map(item => {
     const masteryAfter = item.questionCount > 0
-      ? Math.round((item.correctCount / item.questionCount) * 100)
+      ? Math.round(item.correctCount / item.questionCount * 100)
       : 0;
 
     return {
       ...item,
       masteryAfter,
-      statusLabel: item.correctCount === item.questionCount
-        ? '???'
-        : (item.correctCount > 0 ? '????' : '??????'),
-      statusType: item.correctCount === item.questionCount
-        ? 'success'
-        : (item.correctCount > 0 ? 'warning' : 'danger')
+      statusLabel: masteryAfter >= 80 ? '已掌握' : (masteryAfter >= 60 ? '待巩固' : '薄弱'),
+      statusType: masteryAfter >= 80 ? 'success' : (masteryAfter >= 60 ? 'warning' : 'danger')
     };
-  }).sort((a, b) => Number(b.isInitialWeakPoint) - Number(a.isInitialWeakPoint) || a.masteryAfter - b.masteryAfter);
+  });
 }
 
-function buildKnowledgeGraphData(studentId) {
-  const knowledgePoints = db.find('knowledgePoints');
-  const answers = db.find('answers').filter(a => a.studentId === studentId);
-  const practiceRecords = db.find('learningRecords').filter(record => record.studentId === studentId && record.recordType === 'practice');
+function buildKnowledgePointSpecificQuestions(knowledgePoint, masteryRate) {
+  if (!knowledgePoint) return [];
 
-  const statsMap = {};
+  const level = masteryRate < 40 ? 'easy' : (masteryRate < 60 ? 'medium' : 'hard');
+  const name = knowledgePoint.name;
 
-  knowledgePoints.forEach(kp => {
-    statsMap[kp.id] = {
-      total: 0,
-      count: 0,
-      wrongCount: 0,
-      practiceCount: 0,
-      correctCount: 0
-    };
-  });
-
-  answers.forEach(answer => {
-    (answer.questionResults || []).forEach(result => {
-      const question = db.findById('questions', result.questionId);
-      if (!question || !question.knowledgePoints) {
-        return;
-      }
-
-      question.knowledgePoints.forEach(kpId => {
-        if (!statsMap[kpId]) {
-          statsMap[kpId] = { total: 0, count: 0, wrongCount: 0, practiceCount: 0, correctCount: 0 };
-        }
-        statsMap[kpId].count += 1;
-        statsMap[kpId].total += result.correct ? 100 : 0;
-        if (!result.correct) {
-          statsMap[kpId].wrongCount += 1;
-        }
-      });
-    });
-  });
-
-  practiceRecords.forEach(record => {
-    if (!record.knowledgePointId) {
-      return;
-    }
-    if (!statsMap[record.knowledgePointId]) {
-      statsMap[record.knowledgePointId] = { total: 0, count: 0, wrongCount: 0, practiceCount: 0, correctCount: 0 };
-    }
-    statsMap[record.knowledgePointId].practiceCount += record.questionCount || 0;
-    statsMap[record.knowledgePointId].correctCount += record.correctCount || 0;
-  });
-
-    const graphData = knowledgePoints.map(kp => {
-    const stats = statsMap[kp.id] || { total: 0, count: 0, wrongCount: 0, practiceCount: 0, correctCount: 0 };
-    const totalQuestions = stats.count + stats.practiceCount;
-    const totalCorrect = (stats.total / 100) + stats.correctCount;
-    const masteryRate = totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0;
-
-    return {
-      ...kp,
-      masteryRate,
-      masteryLabel: getMasteryLabel(masteryRate),
-      wrongCount: stats.wrongCount,
-      practiceCount: stats.practiceCount,
-      tested: totalQuestions > 0,
-      clickable: stats.wrongCount > 0,
-      examples: getKnowledgePointExamples(kp.id)
-    };
-  });
-
-  return {
-    tree: graphData.map(kp => ({
-      ...kp,
-      children: graphData.filter(item => item.parentId === kp.id)
-    })),
-    flat: graphData
+  const bank = {
+    '有理数': [
+      { type: 'choice', content: '下列各数中，属于有理数的是？', options: ['√2', 'π', '-3', '0.1010010001…'], answer: '-3', score: 10 },
+      { type: 'fill', content: '计算：-8 + 13 = ____', answer: '5', score: 12 },
+      { type: 'shortAnswer', content: '请说明什么是有理数，并举一个正有理数和一个负有理数的例子。', answer: '有理数是可以写成两个整数比的数，例如 3/4 和 -2。', score: 18 }
+    ],
+    '有理数的加减法': [
+      { type: 'choice', content: '计算 7 + (-11) 的结果是？', options: ['18', '-4', '4', '-18'], answer: '-4', score: 10 },
+      { type: 'fill', content: '计算：-6 - 9 = ____', answer: '-15', score: 12 },
+      { type: 'shortAnswer', content: '简述进行有理数加减混合运算时的步骤。', answer: '先统一成加法，再根据同号相加、异号相减的规则计算。', score: 18 }
+    ],
+    '有理数的乘除法': [
+      { type: 'choice', content: '计算 (-3) × 5 的结果是？', options: ['15', '-15', '8', '-8'], answer: '-15', score: 10 },
+      { type: 'fill', content: '计算：24 ÷ (-6) = ____', answer: '-4', score: 12 },
+      { type: 'shortAnswer', content: '简述有理数乘除法的符号法则。', answer: '同号得正，异号得负，再计算绝对值。', score: 18 }
+    ],
+    '整式的加减': [
+      { type: 'choice', content: '化简 3x + 2x 的结果是？', options: ['5x', '6x²', '5', 'x'], answer: '5x', score: 10 },
+      { type: 'fill', content: '化简：4a - 7a = ____', answer: '-3a', score: 12 },
+      { type: 'shortAnswer', content: '简述合并同类项时需要满足的条件。', answer: '所含字母相同且相同字母的指数也分别相同。', score: 18 }
+    ],
+    '一元一次方程': [
+      { type: 'choice', content: '方程 2x + 5 = 13 的解是？', options: ['3', '4', '5', '6'], answer: '4', score: 10 },
+      { type: 'fill', content: '解方程：x - 7 = 9，则 x = ____', answer: '16', score: 12 },
+      { type: 'shortAnswer', content: '解方程 3x - 2 = 10，并写出主要步骤。', answer: '先移项得 3x = 12，再两边同时除以 3，得 x = 4。', score: 18 }
+    ],
+    '几何初步': [
+      { type: 'choice', content: '线段有几个端点？', options: ['0个', '1个', '2个', '无数个'], answer: '2个', score: 10 },
+      { type: 'fill', content: '一个周角等于 ____ 度。', answer: '360', score: 12 },
+      { type: 'shortAnswer', content: '请简述射线、线段、直线三者的区别。', answer: '射线有一个端点，线段有两个端点，直线没有端点。', score: 18 }
+    ],
+    '相交线与平行线': [
+      { type: 'choice', content: '两条平行线被第三条直线所截，内错角的关系是？', options: ['互补', '相等', '互余', '没有关系'], answer: '相等', score: 10 },
+      { type: 'fill', content: '同一平面内，两条不重合且永不相交的直线叫做 ____。', answer: '平行线', score: 12 },
+      { type: 'shortAnswer', content: '请写出平行线的两个常见性质。', answer: '同位角相等，内错角相等，同旁内角互补。', score: 18 }
+    ],
+    '实数': [
+      { type: 'choice', content: '下列各数中，属于无理数的是？', options: ['1/2', '0.3', '√3', '-7'], answer: '√3', score: 10 },
+      { type: 'fill', content: '9 的平方根是 ____。', answer: '±3', score: 12 },
+      { type: 'shortAnswer', content: '请简述有理数与无理数的关系。', answer: '有理数和无理数统称为实数。', score: 18 }
+    ],
+    '平面直角坐标系': [
+      { type: 'choice', content: '点 (3,-2) 位于第几象限？', options: ['第一象限', '第二象限', '第三象限', '第四象限'], answer: '第四象限', score: 10 },
+      { type: 'fill', content: '原点的坐标是 ____。', answer: '(0,0)', score: 12 },
+      { type: 'shortAnswer', content: '请说明在平面直角坐标系中如何确定一个点的位置。', answer: '先确定横坐标，再确定纵坐标，用有序数对表示。', score: 18 }
+    ],
+    '二元一次方程组': [
+      { type: 'choice', content: '下列哪组数是方程组 x+y=5, x-y=1 的解？', options: ['x=3,y=2', 'x=2,y=3', 'x=4,y=1', 'x=1,y=4'], answer: 'x=3,y=2', score: 10 },
+      { type: 'fill', content: '若 x+y=7, x=3，则 y= ____。', answer: '4', score: 12 },
+      { type: 'shortAnswer', content: '简述代入法解二元一次方程组的基本思路。', answer: '先由一个方程表示一个未知数，再代入另一个方程求解。', score: 18 }
+    ],
+    '不等式与不等式组': [
+      { type: 'choice', content: '解不等式 x+2>5，结果是？', options: ['x>3', 'x<3', 'x>7', 'x<7'], answer: 'x>3', score: 10 },
+      { type: 'fill', content: '不等式 2x<8 的解集是 ____。', answer: 'x<4', score: 12 },
+      { type: 'shortAnswer', content: '请说明解不等式时什么时候需要改变不等号方向。', answer: '当不等式两边同时乘或除以负数时，需要改变不等号方向。', score: 18 }
+    ],
+    '数据的收集与整理': [
+      { type: 'choice', content: '调查全班同学最喜欢的运动项目，较适合采用哪种方式整理数据？', options: ['条形统计图', '函数图像', '坐标作图', '几何证明'], answer: '条形统计图', score: 10 },
+      { type: 'fill', content: '把收集到的数据按类别分组并统计数量，这个过程叫做数据的 ____。', answer: '整理', score: 12 },
+      { type: 'shortAnswer', content: '请简述数据收集与整理的一般步骤。', answer: '先确定调查对象与方式，再收集数据，最后分类整理并进行分析。', score: 18 }
+    ]
   };
+
+  const selected = bank[name] || [
+    { type: 'choice', content: `关于“${name}”的学习，下列做法最合理的是？`, options: [`先理解${name}的概念再练习`, '直接背答案', '忽略题干条件', '只看结论'], answer: `先理解${name}的概念再练习`, score: 10 },
+    { type: 'fill', content: `完成“${name}”相关题目时，最关键的是掌握正确的 ____。`, answer: '方法', score: 12 },
+    { type: 'shortAnswer', content: `请简述你解决“${name}”相关题目时的标准思路。`, answer: `先审题并提取与${name}相关的条件，再选择对应方法，按步骤作答并检查结果。`, score: 18 }
+  ];
+
+  return selected.map((item, idx) => ({
+    id: `generated-${knowledgePoint.id}-${idx + 1}`,
+    type: item.type,
+    content: item.content,
+    options: item.options || [],
+    answer: item.answer,
+    answerDisplay: item.type === 'choice'
+      ? buildChoiceDisplay({ options: item.options || [], answer: item.answer }, item.answer)
+      : item.answer,
+    score: item.score,
+    difficulty: level,
+    knowledgePoints: [knowledgePoint.id]
+  }));
 }
 
-// ========== 个人信息管理 ==========
+function buildGeneratedPracticeQuestion(knowledgePoint, index, masteryRate) {
+  const name = knowledgePoint ? knowledgePoint.name : '当前知识点';
+  const description = knowledgePoint && knowledgePoint.description ? knowledgePoint.description : `${name}相关训练`;
+  const difficulty = masteryRate < 40 ? 'easy' : (masteryRate < 60 ? 'medium' : 'hard');
+  const seed = index + 1;
 
-// 获取个人信息
-router.get('/profile', (req, res) => {
-  try {
-    const studentId = req.headers['x-user-id'];
-    const student = getStudentByUserId(studentId);
-
-    if (!student) {
-      // 尝试从用户表查找
-      const user = db.findById('users', studentId);
-      if (user && user.role === 'student') {
-        // 创建学生记录
-        const newStudent = db.create('students', {
-          id: studentId,
-          userId: studentId,
-          name: user.name,
-          studentNo: `S${Date.now()}`,
-          classId: null,
-          gender: 'male'
-        });
-        return res.json({ success: true, data: newStudent });
-      }
-      return res.status(404).json({ success: false, message: '学生不存在' });
+  return [
+    {
+      id: `generated-${knowledgePoint ? knowledgePoint.id : 'custom'}-choice-${seed}`,
+      type: 'choice',
+      content: `知识点【${name}】选择题 ${seed}：下列哪一项最符合“${description}”的学习目标？`,
+      options: [
+        `准确理解并应用${name}的核心方法`,
+        `忽略题干条件直接套公式`,
+        `只看结果不分析过程`,
+        `将无关知识点混入解题步骤`
+      ],
+      answer: `准确理解并应用${name}的核心方法`,
+      answerDisplay: `A（准确理解并应用${name}的核心方法）`,
+      score: 10,
+      difficulty,
+      knowledgePoints: knowledgePoint ? [knowledgePoint.id] : []
+    },
+    {
+      id: `generated-${knowledgePoint ? knowledgePoint.id : 'custom'}-fill-${seed}`,
+      type: 'fill',
+      content: `知识点【${name}】填空题 ${seed}：完成该知识点训练后，你应当能够独立完成“${name}”相关题目的________。`,
+      answer: '关键步骤',
+      answerDisplay: '关键步骤',
+      score: 12,
+      difficulty,
+      knowledgePoints: knowledgePoint ? [knowledgePoint.id] : []
+    },
+    {
+      id: `generated-${knowledgePoint ? knowledgePoint.id : 'custom'}-short-${seed}`,
+      type: 'shortAnswer',
+      content: `知识点【${name}】简答题 ${seed}：请简述你解决“${name}”相关题目时的标准思路。`,
+      answer: `先审题并提取与${name}相关的条件，再选择对应方法，按步骤作答并检查结果。`,
+      answerDisplay: `先审题并提取与${name}相关的条件，再选择对应方法，按步骤作答并检查结果。`,
+      score: 18,
+      difficulty,
+      knowledgePoints: knowledgePoint ? [knowledgePoint.id] : []
     }
+  ][index % 3];
+}
 
-    // 获取班级信息
-    let classInfo = null;
-    if (student.classId) {
-      classInfo = db.findById('classes', student.classId);
-    }
-
-    res.json({
-      success: true,
-      data: {
-        ...student,
-        class: classInfo
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+function ensurePracticeQuestionsForKnowledgePoint(studentId, knowledgePointId) {
+  const knowledgePoint = db.findById('knowledgePoints', knowledgePointId);
+  if (!knowledgePoint) {
+    return [];
   }
-});
 
-// 更新个人信息
-router.put('/profile', (req, res) => {
-  try {
-    const studentId = req.headers['x-user-id'];
-    const { name, gender, email, phone } = req.body;
+  const weakSummary = buildWeakPointSummary(studentId);
+  const matchedWeak = weakSummary.find(item => item.id === knowledgePointId);
+  const masteryRate = matchedWeak ? parseInt(matchedWeak.masteryRate || 0, 10) : 100;
 
-    const student = getStudentByUserId(studentId);
-    if (!student) {
-      return res.status(404).json({ success: false, message: '学生不存在' });
-    }
+  const specificQuestions = buildKnowledgePointSpecificQuestions(knowledgePoint, masteryRate);
 
-    const updated = db.updateById('students', student.id, { name, gender });
-
-    // 同步更新用户信息
-    db.updateById('users', student.userId || studentId, { name, email, phone });
-
-    res.json({ success: true, data: updated, message: '信息更新成功' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// 绑定班级
-router.post('/bind-class', (req, res) => {
-  try {
-    const studentId = req.headers['x-user-id'];
-    const { classId } = req.body;
-
-    const cls = db.findById('classes', classId);
-    if (!cls) {
-      return res.status(404).json({ success: false, message: '班级不存在' });
-    }
-
-    // 更新学生的班级
-    const student = getStudentByUserId(studentId);
-    if (student) {
-      db.updateById('students', student.id, { classId });
-    }
-
-    // 更新班级的学生列表
-    if (student && !cls.students.includes(student.id)) {
-      db.updateById('classes', classId, {
-        students: [...cls.students, student.id]
-      });
-    }
-
-    res.json({ success: true, message: '班级绑定成功' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// ========== 作业/试卷管理 ==========
-
-// 获取待答题列表
-router.get('/assignments', (req, res) => {
-  try {
-    const studentId = req.headers['x-user-id'];
-    const { status } = req.query;
-
-    const student = getStudentByUserId(studentId);
-    if (!student) {
-      return res.status(404).json({ success: false, message: '学生不存在' });
-    }
-
-    // 计算学生层次
-    let studentLevel = 'normal';
-    const answers = db.find('answers').filter(a => a.studentId === student.id);
-    if (answers.length > 0) {
-      // 取最近一次的成绩
-      const latestAnswer = answers.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt))[0];
-      if (latestAnswer.totalScore >= 90) {
-        studentLevel = 'strong';
-      } else if (latestAnswer.totalScore < 60) {
-        studentLevel = 'weak';
-      }
-    }
-
-    // 获取班级的所有作业
-    let assignments = [];
-    if (student.classId) {
-      assignments = db.find('assignments', { classId: student.classId });
-    }
-
-    // 过滤出学生相关的作业（支持多层次）
-    const studentAssignments = assignments.map(assignment => {
-      const paper = db.findById('papers', assignment.paperId);
-      const latestAnswer = getLatestAnswerByAssignmentAndStudent(assignment.id, student.id);
-      const assignmentLevels = Array.isArray(assignment.levels)
-        ? assignment.levels
-        : (assignment.level ? [assignment.level] : []);
-
-      return {
-        ...assignment,
-        paperTitle: paper?.title,
-        questionCount: paper?.questions?.length || 0,
-        submitted: !!latestAnswer,
-        latestAnswerId: latestAnswer?.id,
-        score: latestAnswer?.totalScore,
-        answerStatus: latestAnswer?.status || null,
-        levels: assignmentLevels
-      };
-    }).filter(assignment => {
-      if (!assignment.levels || assignment.levels.length === 0) {
-        return true;
-      }
-      return assignment.levels.includes(studentLevel);
-    });
-
-    // 根据状态过滤
-    let filtered = studentAssignments;
-    if (status === 'pending') {
-      filtered = studentAssignments.filter(a => !a.submitted);
-    } else if (status === 'completed') {
-      filtered = studentAssignments.filter(a => a.submitted);
-    }
-
-    res.json({ success: true, data: filtered, studentLevel });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// 获取试卷题目
-router.get('/assignments/:id/questions', (req, res) => {
-  try {
-    const { id } = req.params;
-    const assignment = db.findById('assignments', id);
-
-    if (!assignment) {
-      return res.status(404).json({ success: false, message: '作业不存在' });
-    }
-
-    const paper = db.findById('papers', assignment.paperId);
-    if (!paper) {
-      return res.status(404).json({ success: false, message: '试卷不存在' });
-    }
-
-    // 获取所有题目
-    const questions = paper.questions.map(qId => db.findById('questions', qId)).filter(q => q);
-
-    // 隐藏答案
-    const questionsForStudent = questions.map(q => ({
-      id: q.id,
-      type: q.type,
-      content: q.content,
-      options: q.options,
-      score: q.score,
-      difficulty: q.difficulty
+  const existingQuestions = db.find('questions')
+    .filter(question => {
+      return Array.isArray(question.knowledgePoints) && question.knowledgePoints.includes(knowledgePointId);
+    })
+    .map(question => ({
+      ...question,
+      answerDisplay: question.type === 'choice'
+        ? buildChoiceDisplay(question, question.answer)
+        : (question.answer || '-')
     }));
 
-    res.json({
-      success: true,
-      data: {
-        assignment,
-        paper,
-        questions: questionsForStudent
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
+  const mergedQuestions = specificQuestions.concat(
+    existingQuestions.filter(question => !specificQuestions.some(item => item.content === question.content))
+  );
 
-function createLearningRecord(record) {
-  return db.create('learningRecords', {
-    ...record,
-    completedAt: record.completedAt || new Date().toISOString()
-  });
-}
+  const targetLevel = masteryRate < 40 ? 35 : (masteryRate < 60 ? 60 : 85);
 
-function markWrongQuestionAsActive(studentId, questionId) {
-  const masteredRecord = db.findOne('masteredWrongQuestions', { studentId, questionId });
-  if (masteredRecord) {
-    db.deleteById('masteredWrongQuestions', masteredRecord.id);
-  }
+  return mergedQuestions
+    .slice()
+    .sort((a, b) => {
+      const scoreA = Math.abs((a.difficulty === 'easy' ? 35 : a.difficulty === 'medium' ? 60 : 85) - targetLevel);
+      const scoreB = Math.abs((b.difficulty === 'easy' ? 35 : b.difficulty === 'medium' ? 60 : 85) - targetLevel);
+      return scoreA - scoreB;
+    })
+    .slice(0, Math.max(3, Math.min(6, masteryRate < 40 ? 5 : masteryRate < 60 ? 4 : 3)));
 }
 
 function syncWrongQuestionStatusFromPractice(studentId, questionResults, practiceRecord, mode) {
-  questionResults.forEach(result => {
-    if (result.correct) {
-      return;
-    }
+  questionResults.forEach(item => {
+    if (item.correct) {
+      const existed = db.findOne('masteredWrongQuestions', {
+        studentId,
+        questionId: item.questionId
+      });
 
-    if (mode === 'wrong-question') {
-      markWrongQuestionAsActive(studentId, result.questionId);
+      if (!existed) {
+        db.create('masteredWrongQuestions', {
+          studentId,
+          questionId: item.questionId,
+          masteredAt: new Date().toISOString(),
+          sourceRecordId: practiceRecord.id,
+          mode
+        });
+      } else {
+        db.updateById('masteredWrongQuestions', existed.id, {
+          masteredAt: new Date().toISOString(),
+          sourceRecordId: practiceRecord.id,
+          mode
+        });
+      }
+    } else {
+      markWrongQuestionAsActive(studentId, item.questionId);
     }
   });
-
-  if (mode === 'wrong-question' && practiceRecord.allCorrect) {
-    practiceRecord.questionIds.forEach(questionId => {
-      markWrongQuestionAsActive(studentId, questionId);
-    });
-  }
 }
 
-// 提交答案
-router.post('/assignments/:id/submit', (req, res) => {
+function buildWeakPointSummary(studentId) {
+  const wrongEntries = getWrongQuestionEntries(studentId);
+  const practiceRecords = db.find('learningRecords').filter(item => item.studentId === studentId);
+  const knowledgePoints = db.find('knowledgePoints');
+
+  return knowledgePoints.map(item => {
+    const relatedWrongQuestions = wrongEntries.filter(question => {
+      return Array.isArray(question.knowledgePoints) && question.knowledgePoints.includes(item.id);
+    });
+
+    const activeWrongQuestions = relatedWrongQuestions.filter(question => !question.mastered);
+
+    const relatedPracticeRecords = practiceRecords.filter(record => {
+      return Array.isArray(record.knowledgePointChanges) && record.knowledgePointChanges.some(change => change.knowledgePointId === item.id);
+    });
+
+    const latestPracticeChange = relatedPracticeRecords
+      .slice()
+      .sort((a, b) => new Date(b.createdAt || b.updatedAt || 0) - new Date(a.createdAt || a.updatedAt || 0))
+      .map(record => {
+        return (record.knowledgePointChanges || []).find(change => change.knowledgePointId === item.id);
+      })
+      .find(Boolean) || null;
+
+    let masteryRate = latestPracticeChange ? latestPracticeChange.masteryAfter : 100;
+
+    if (activeWrongQuestions.length > 0) {
+      const penalty = activeWrongQuestions.length * 15;
+      masteryRate = Math.min(masteryRate, Math.max(20, 55 - penalty + activeWrongQuestions.length * 5));
+    }
+
+    if (!latestPracticeChange && relatedWrongQuestions.length > 0 && activeWrongQuestions.length === 0) {
+      masteryRate = 80;
+    }
+
+    if (activeWrongQuestions.length > 0) {
+      masteryRate = Math.min(masteryRate, 59);
+    }
+
+    const practiceCount = buildKnowledgePointSpecificQuestions(item, masteryRate).length + db.find('questions').filter(question => {
+      return Array.isArray(question.knowledgePoints) && question.knowledgePoints.includes(item.id);
+    }).length;
+
+    return {
+      id: item.id,
+      name: item.name,
+      description: item.description || '',
+      masteryRate,
+      wrongCount: activeWrongQuestions.length,
+      totalWrongCount: relatedWrongQuestions.length,
+      practiceCount,
+      hasNewRecommendation: activeWrongQuestions.length > 0,
+      improved: masteryRate >= 60,
+      lastHomeworkAt: relatedWrongQuestions.length
+        ? relatedWrongQuestions[0].submittedAt || relatedWrongQuestions[0].createdAt || ''
+        : ''
+    };
+  }).sort((a, b) => a.masteryRate - b.masteryRate);
+}
+
+function buildChatPracticeData(studentId, knowledgePointId) {
+  const knowledgePoint = db.findById('knowledgePoints', knowledgePointId);
+  const weakSummary = buildWeakPointSummary(studentId);
+  const currentWeak = weakSummary.find(item => item.id === knowledgePointId);
+  const candidateQuestions = ensurePracticeQuestionsForKnowledgePoint(studentId, knowledgePointId);
+
+  const relatedKnowledgePoints = weakSummary
+    .filter(item => item.id === knowledgePointId || item.masteryRate < 80 || item.wrongCount > 0)
+    .slice(0, 6)
+    .map(item => ({
+      id: item.id,
+      name: item.name,
+      description: item.description || '',
+      masteryRate: item.masteryRate,
+      wrongCount: item.wrongCount,
+      questionCount: ensurePracticeQuestionsForKnowledgePoint(studentId, item.id).length,
+      hasNewRecommendation: item.wrongCount > 0 || item.masteryRate < 60
+    }));
+
+  return {
+    openingMessage: knowledgePoint
+      ? `当前聚焦知识点：${knowledgePoint.name}，系统已根据你当前掌握度 ${currentWeak ? currentWeak.masteryRate : 100}% 推送个性化补练。`
+      : '请选择知识点开始练习。',
+    knowledgePoint,
+    candidateQuestions,
+    relatedKnowledgePoints
+  };
+}
+
+// 学生作业列表
+router.get('/assignments', (req, res) => {
   try {
     const studentId = req.headers['x-user-id'];
-    const { id } = req.params;
-    const { answers: questionAnswers } = req.body;
     const student = getStudentByUserId(studentId);
 
     if (!student) {
       return res.status(404).json({ success: false, message: '学生不存在' });
     }
 
-    const assignment = db.findById('assignments', id);
-    if (!assignment) {
-      return res.status(404).json({ success: false, message: '作业不存在' });
-    }
+    const { status } = req.query;
 
-    const paper = db.findById('papers', assignment.paperId);
-    if (!paper) {
-      return res.status(404).json({ success: false, message: '试卷不存在' });
-    }
-
-    const payload = calculateAnswerPayload(paper.questions, questionAnswers || {});
-    const status = payload.hasSubjectiveQuestions ? 'submitted' : 'graded';
-
-    const answerRecord = db.create('answers', {
-      assignmentId: id,
-      paperId: assignment.paperId,
-      classId: assignment.classId,
-      studentId: student.id,
-      answers: questionAnswers || {},
-      questionResults: payload.questionResults,
-      totalScore: payload.totalScore,
-      knowledgePointScores: payload.knowledgePointScores,
-      submittedAt: new Date().toISOString(),
-      status,
-      recordType: 'homework'
+    const assignments = db.find('assignments').filter(assignment => {
+      if (Array.isArray(assignment.studentIds) && assignment.studentIds.length) {
+        return assignment.studentIds.includes(student.id);
+      }
+      return assignment.classId === student.classId;
     });
 
-    createLearningRecord({
-      studentId: student.id,
-      source: 'assignment',
-      recordType: 'homework',
-      assignmentId: id,
-      paperId: assignment.paperId,
-      score: payload.totalScore,
-      status,
-      completedAt: answerRecord.submittedAt,
-      answerId: answerRecord.id,
-      questionCount: payload.questionResults.length,
-      correctCount: payload.questionResults.filter(item => item.correct).length
-    });
-
-    res.json({
-      success: true,
-      data: {
-        answerId: answerRecord.id,
-        totalScore: payload.totalScore,
-        questionResults: payload.questionResults,
-        status
-      },
-      message: '提交成功'
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-// 获取最近一次答题记录
-router.get('/assignments/:id/latest-answer', (req, res) => {
-  try {
-    const studentId = req.headers['x-user-id'];
-    const { id } = req.params;
-    const student = getStudentByUserId(studentId);
-
-    if (!student) {
-      return res.status(404).json({ success: false, message: '学生不存在' });
-    }
-
-    const assignment = db.findById('assignments', id);
-    if (!assignment) {
-      return res.status(404).json({ success: false, message: '作业不存在' });
-    }
-
-    const latestAnswer = getLatestAnswerByAssignmentAndStudent(id, student.id);
-    if (!latestAnswer) {
-      return res.status(404).json({ success: false, message: '暂无答题记录' });
-    }
-
-    res.json({
-      success: true,
-      data: { answerId: latestAnswer.id }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-// 查看答题结果
-router.get('/answers/:id', (req, res) => {
-  try {
-    const studentId = req.headers['x-user-id'];
-    const student = getStudentByUserId(studentId);
-    const { id } = req.params;
-    const answer = db.findById('answers', id);
-
-    if (!answer) {
-      return res.status(404).json({ success: false, message: '答题记录不存在' });
-    }
-
-    if (student && answer.studentId !== student.id) {
-      return res.status(403).json({ success: false, message: '无权查看该答题记录' });
-    }
-
-    const paper = db.findById('papers', answer.paperId);
-    const assignment = db.findById('assignments', answer.assignmentId);
-
-    const questions = answer.questionResults.map(qr => {
-      const question = db.findById('questions', qr.questionId);
-      const manualScore = answer.scores && answer.scores[qr.questionId] !== undefined
-        ? answer.scores[qr.questionId]
-        : qr.score;
+    const result = assignments.map(assignment => {
+      const paper = db.findById('papers', assignment.paperId);
+      const latestAnswer = getLatestAnswerByAssignmentAndStudent(assignment.id, student.id);
 
       return {
-        ...qr,
-        score: manualScore,
-        fullScore: question?.score || 0,
-        content: question?.content,
-        options: question?.options,
-        correctAnswer: question?.answer,
-        type: question?.type,
-        knowledgePoints: question?.knowledgePoints
+        ...assignment,
+        paperTitle: paper ? paper.title : '题库组卷',
+        questionCount:
+          paper && Array.isArray(paper.questions)
+            ? paper.questions.length
+            : (Array.isArray(assignment.questionIds) ? assignment.questionIds.length : 0),
+        submitted: !!latestAnswer,
+        score: latestAnswer ? latestAnswer.totalScore : undefined
       };
     });
 
+    const filtered = status === 'pending'
+      ? result.filter(item => !item.submitted)
+      : status === 'completed'
+        ? result.filter(item => item.submitted)
+        : result;
+
+    res.json({ success: true, data: filtered });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.get('/learning-track', (req, res) => {
+  try {
+    const studentId = req.headers['x-user-id'];
+    const student = getStudentByUserId(studentId);
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: '学生不存在' });
+    }
+
+    const homeworkRecords = db.find('answers')
+      .filter(item => item.studentId === student.id)
+      .map(item => {
+        const assignment = db.findById('assignments', item.assignmentId);
+        const paper = assignment ? db.findById('papers', assignment.paperId) : null;
+        const questionResults = Array.isArray(item.questionResults) ? item.questionResults : [];
+        const correctCount = questionResults.filter(result => result.correct).length;
+        const totalCount = questionResults.length;
+        const correctRate = totalCount ? Math.round(correctCount / totalCount * 100) : 0;
+
+        return {
+          id: item.id,
+          date: item.submittedAt || item.createdAt,
+          recordType: 'homework',
+          assignmentTitle: assignment ? assignment.title : '作业记录',
+          paperTitle: paper ? paper.title : '题库组卷',
+          status: item.status || 'submitted',
+          score: item.totalScore || 0,
+          correctRate,
+          masteryAfter: correctRate
+        };
+      });
+
+    const practiceRecords = db.find('learningRecords')
+      .filter(item => item.studentId === student.id)
+      .map(item => {
+        const questionResults = Array.isArray(item.questionResults) ? item.questionResults : [];
+        const correctCount = questionResults.filter(result => result.correct).length;
+        const totalCount = questionResults.length;
+        const correctRate = totalCount ? Math.round(correctCount / totalCount * 100) : 0;
+        const firstKp = Array.isArray(item.knowledgePointChanges) && item.knowledgePointChanges.length
+          ? item.knowledgePointChanges[0]
+          : null;
+
+        return {
+          id: item.id,
+          date: item.createdAt || item.submittedAt,
+          recordType: 'practice',
+          assignmentTitle: item.title || '个性化补练',
+          paperTitle: firstKp ? firstKp.knowledgePointName : '专项练习',
+          status: item.status || 'completed',
+          score: item.totalScore || 0,
+          correctRate,
+          masteryAfter: firstKp ? firstKp.masteryAfter : correctRate
+        };
+      });
+
+    const data = homeworkRecords.concat(practiceRecords)
+      .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.get('/assignments/:id/questions', (req, res) => {
+  try {
+    const studentId = req.headers['x-user-id'];
+    const student = getStudentByUserId(studentId);
+    const { id } = req.params;
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: '学生不存在' });
+    }
+
+    const assignment = db.findById('assignments', id);
+    if (!assignment) {
+      return res.status(404).json({ success: false, message: '作业不存在' });
+    }
+
+    const allowed = Array.isArray(assignment.studentIds) && assignment.studentIds.length
+      ? assignment.studentIds.includes(student.id)
+      : assignment.classId === student.classId;
+
+    if (!allowed) {
+      return res.status(403).json({ success: false, message: '无权查看该作业' });
+    }
+
+    const paper = assignment.paperId ? db.findById('papers', assignment.paperId) : null;
+    const questionIds = paper && Array.isArray(paper.questions)
+      ? paper.questions
+      : (Array.isArray(assignment.questionIds) ? assignment.questionIds : []);
+
+    const questions = questionIds
+      .map(questionId => db.findById('questions', questionId))
+      .filter(Boolean);
+
     res.json({
       success: true,
       data: {
-        answer: {
-          ...answer,
-          totalScore: answer.totalScore || 0
+        assignment: {
+          ...assignment,
+          title: assignment.title || '作业',
+          paperTitle: paper ? paper.title : '题库组卷'
         },
-        paper,
-        assignment,
         questions
       }
     });
@@ -797,306 +750,175 @@ router.get('/answers/:id', (req, res) => {
   }
 });
 
-// ========== 学情自查 ==========
-
-// 个人知识图谱
-router.get('/knowledge-graph', (req, res) => {
+router.get('/assignments/:id/latest-answer', (req, res) => {
   try {
     const studentId = req.headers['x-user-id'];
     const student = getStudentByUserId(studentId);
-    const realStudentId = student ? student.id : studentId;
+    const { id } = req.params;
 
-    const graphData = buildKnowledgeGraphData(realStudentId);
+    if (!student) {
+      return res.status(404).json({ success: false, message: '学生不存在' });
+    }
 
-    res.json({ success: true, data: graphData.tree });
+    const latestAnswer = getLatestAnswerByAssignmentAndStudent(id, student.id);
+    if (!latestAnswer) {
+      return res.json({ success: true, data: null });
+    }
+
+    res.json({ success: true, data: { answerId: latestAnswer.id } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// 薄弱知识点清单
+router.get('/answers/:id', (req, res) => {
+  try {
+    const studentId = req.headers['x-user-id'];
+    const student = getStudentByUserId(studentId);
+    const { id } = req.params;
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: '学生不存在' });
+    }
+
+    const answerRecord = db.findById('answers', id);
+    if (!answerRecord || answerRecord.studentId !== student.id) {
+      return res.status(404).json({ success: false, message: '答题记录不存在' });
+    }
+
+    const questions = (answerRecord.questionResults || []).map(item => {
+      const question = db.findById('questions', item.questionId) || {};
+      return {
+        questionId: item.questionId,
+        answer: item.answer || '',
+        correct: !!item.correct,
+        score: item.score || 0,
+        correctAnswer: question.type === 'choice'
+          ? buildChoiceDisplay(question, question.answer)
+          : (question.answer || '')
+      };
+    });
+
+    res.json({ success: true, data: { ...answerRecord, questions } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 薄弱知识点
 router.get('/weak-points', (req, res) => {
   try {
     const studentId = req.headers['x-user-id'];
     const student = getStudentByUserId(studentId);
-    const realStudentId = student ? student.id : studentId;
 
-    const learningRecords = db.find('learningRecords').filter(record => record.studentId === realStudentId);
-    const masteredWrongQuestions = db.find('masteredWrongQuestions').filter(item => item.studentId === realStudentId);
-
-    const knowledgePointStats = {};
-
-    learningRecords.forEach(record => {
-      const kpId = record.knowledgePointId;
-      if (!kpId) {
-        return;
-      }
-
-      if (!knowledgePointStats[kpId]) {
-        knowledgePointStats[kpId] = {
-          wrongCount: 0,
-          practiceCount: 0,
-          correctCount: 0,
-          lastPracticeAt: null,
-          lastHomeworkAt: null,
-          latestRecordType: null,
-          recommendationClearedAt: null
-        };
-      }
-
-      const stat = knowledgePointStats[kpId];
-      if (record.recordType === 'practice') {
-        stat.practiceCount += record.questionCount || 0;
-        stat.correctCount += record.correctCount || 0;
-        stat.lastPracticeAt = record.completedAt;
-        stat.latestRecordType = 'practice';
-      }
-
-      if (record.recordType === 'homework') {
-        stat.lastHomeworkAt = record.completedAt || null;
-        stat.recommendationClearedAt = record.recommendationClearedAt || null;
-        stat.latestRecordType = stat.latestRecordType || 'homework';
-      }
-    });
-
-    const answers = db.find('answers').filter(a => a.studentId === realStudentId);
-    answers.forEach(answer => {
-      (answer.questionResults || []).forEach(qr => {
-        if (qr.correct) {
-          return;
-        }
-
-        const question = db.findById('questions', qr.questionId);
-        if (!question || !question.knowledgePoints) {
-          return;
-        }
-
-        question.knowledgePoints.forEach(kpId => {
-          if (!knowledgePointStats[kpId]) {
-            knowledgePointStats[kpId] = {
-              wrongCount: 0,
-              practiceCount: 0,
-              correctCount: 0,
-              lastPracticeAt: null,
-              lastHomeworkAt: null,
-              latestRecordType: null
-            };
-          }
-          knowledgePointStats[kpId].wrongCount += 1;
-        });
-      });
-    });
-
-    const masteredQuestionIds = masteredWrongQuestions.map(item => item.questionId);
-    if (masteredQuestionIds.length > 0) {
-      masteredQuestionIds.forEach(questionId => {
-        const question = db.findById('questions', questionId);
-        if (!question || !question.knowledgePoints) {
-          return;
-        }
-        question.knowledgePoints.forEach(kpId => {
-          if (!knowledgePointStats[kpId]) {
-            knowledgePointStats[kpId] = {
-              wrongCount: 0,
-              practiceCount: 0,
-              correctCount: 0,
-              lastPracticeAt: null,
-              lastHomeworkAt: null,
-              latestRecordType: null
-            };
-          }
-        });
-      });
+    if (!student) {
+      return res.status(404).json({ success: false, message: '学生不存在' });
     }
 
-    const weakPoints = Object.entries(knowledgePointStats)
-      .map(([kpId, stats]) => {
-        const kp = db.findById('knowledgePoints', kpId);
-        if (!kp) {
-          return null;
-        }
-
-        const total = stats.wrongCount + stats.practiceCount;
-        const masteredByPractice = stats.practiceCount > 0 ? (stats.correctCount / stats.practiceCount) * 100 : 0;
-        const masteryRate = total > 0
-          ? Math.round((stats.correctCount / total) * 100)
-          : Math.round(masteredByPractice);
-
-        const hasFreshHomeworkTrigger = !!stats.lastHomeworkAt && (!stats.lastPracticeAt || new Date(stats.lastHomeworkAt) > new Date(stats.lastPracticeAt));
-        const hasBeenCleared = !!stats.recommendationClearedAt && !!stats.lastHomeworkAt && new Date(stats.recommendationClearedAt) >= new Date(stats.lastHomeworkAt);
-
-        return {
-          ...kp,
-          wrongCount: stats.wrongCount,
-          practiceCount: stats.practiceCount,
-          correctCount: stats.correctCount,
-          masteryRate: String(Math.max(0, Math.min(100, masteryRate))),
-          improved: stats.practiceCount > 0 && stats.correctCount > 0,
-          latestRecordType: stats.latestRecordType,
-          lastPracticeAt: stats.lastPracticeAt,
-          lastHomeworkAt: stats.lastHomeworkAt || null,
-          recommendationClearedAt: stats.recommendationClearedAt || null,
-          hasNewRecommendation: hasFreshHomeworkTrigger && !hasBeenCleared && stats.wrongCount > 0
-        };
-      })
-      .filter(item => item && (item.wrongCount > 0 || item.practiceCount > 0))
-      .sort((a, b) => Number(a.masteryRate) - Number(b.masteryRate) || b.wrongCount - a.wrongCount);
-
-    res.json({ success: true, data: weakPoints });
+    res.json({ success: true, data: buildWeakPointSummary(student.id) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// 学习轨迹
-router.get('/learning-track', (req, res) => {
+// 错题本
+router.get('/wrong-questions', (req, res) => {
   try {
     const studentId = req.headers['x-user-id'];
     const student = getStudentByUserId(studentId);
-    const realStudentId = student ? student.id : studentId;
 
-    const answers = db.find('answers')
-      .filter(a => a.studentId === realStudentId && a.totalScore !== undefined)
-      .map(answer => {
-        const assignment = db.findById('assignments', answer.assignmentId);
-        const paper = db.findById('papers', answer.paperId);
+    if (!student) {
+      return res.status(404).json({ success: false, message: '学生不存在' });
+    }
 
-        return {
-          id: answer.id,
-          date: answer.submittedAt,
-          assignmentTitle: assignment?.title || '未知作业',
-          paperTitle: paper?.title || '未知试卷',
-          score: answer.totalScore,
-          status: answer.status,
-          recordType: answer.recordType || 'homework',
-          source: 'assignment'
-        };
-      });
+    res.json({ success: true, data: getWrongQuestionEntries(student.id) });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
-    const graphData = buildKnowledgeGraphData(realStudentId);
-    const graphMap = {};
-    graphData.flat.forEach(item => {
-      graphMap[item.id] = item;
-    });
+// 个性化补练推荐
+router.get('/practice-recommendations', (req, res) => {
+  try {
+    const studentId = req.headers['x-user-id'];
+    const student = getStudentByUserId(studentId);
 
-    const practiceRecords = db.find('learningRecords')
-      .filter(record => record.studentId === realStudentId)
-      .map(record => ({
-        id: record.id,
-        date: record.completedAt,
-        assignmentTitle: record.title || (record.recordType === 'practice' ? '薄弱补练' : '学习记录'),
-        paperTitle: record.knowledgePointName || '',
-        score: record.score,
-        status: record.status,
-        recordType: record.recordType,
-        source: record.source,
-        questionCount: record.questionCount,
-        correctCount: record.correctCount,
-        allCorrect: record.allCorrect,
-        correctRate: record.questionCount ? Math.round((record.correctCount || 0) / record.questionCount * 100) : null,
-        masteryAfter: record.knowledgePointId && graphMap[record.knowledgePointId]
-          ? graphMap[record.knowledgePointId].masteryRate
-          : null
+    if (!student) {
+      return res.status(404).json({ success: false, message: '学生不存在' });
+    }
+
+    const recommendations = buildWeakPointSummary(student.id)
+      .filter(item => item.wrongCount > 0 || item.masteryRate < 80)
+      .slice(0, 6)
+      .map(item => ({
+        knowledgePointId: item.id,
+        knowledgePointName: item.name,
+        masteryRate: item.masteryRate,
+        wrongCount: item.wrongCount,
+        questionCount: ensurePracticeQuestionsForKnowledgePoint(student.id, item.id).length,
+        hasNewRecommendation: item.hasNewRecommendation
       }));
 
-    const track = answers.concat(practiceRecords)
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    res.json({ success: true, data: track });
+    res.json({ success: true, data: recommendations });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// 学习记录
-router.get('/learning-records', (req, res) => {
+// 获取补练题 / 错题重做题
+router.get('/practice/:knowledgePointId', (req, res) => {
   try {
     const studentId = req.headers['x-user-id'];
     const student = getStudentByUserId(studentId);
-    const realStudentId = student ? student.id : studentId;
-
-    const records = db.find('learningRecords')
-      .filter(record => record.studentId === realStudentId)
-      .map(buildLearningRecord)
-      .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
-
-    res.json({ success: true, data: records });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// ========== 薄弱补练 ==========
-
-// AI 薄弱补练推荐（预留外部 API 接入）
-router.get('/practice-ai-recommendation/:knowledgePointId', async (req, res) => {
-  try {
-    const studentId = req.headers['x-user-id'];
-    const student = getStudentByUserId(studentId);
-    const realStudentId = student ? student.id : studentId;
-    const { knowledgePointId } = req.params;
-
-    const recommendation = await getAiPracticeRecommendations(realStudentId, knowledgePointId);
-
-    res.json({ success: true, data: recommendation });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// 获取补练习题
-router.get('/practice/:knowledgePointId', async (req, res) => {
-  try {
-    const studentId = req.headers['x-user-id'];
-    const student = getStudentByUserId(studentId);
-    const realStudentId = student ? student.id : studentId;
     const { knowledgePointId } = req.params;
     const { questionId } = req.query;
 
-    if (questionId) {
-      const question = db.findById('questions', questionId);
-      if (!question) {
-        return res.status(404).json({ success: false, message: '题目不存在' });
-      }
-      return res.json({
-        success: true,
-        data: {
-          mode: 'wrong-question',
-          title: '错题重做',
-          knowledgePointId: knowledgePointId === 'custom' ? '' : knowledgePointId,
-          chatPractice: {
-            openingMessage: '我们先重做这道错题，我会记录你的作答并在提交后自动判分。',
-            knowledgePoint: null,
-            wrongQuestions: [{ id: question.id, content: question.content }]
-          },
-          questions: [question]
-        }
-      });
+    if (!student) {
+      return res.status(404).json({ success: false, message: '学生不存在' });
     }
 
-    const questions = db.find('questions')
-      .filter(q => q.knowledgePoints && q.knowledgePoints.includes(knowledgePointId))
-      .slice(0, 10);
+    const wrongQuestions = getWrongQuestionEntries(student.id);
+    const wrongQuestion = questionId ? wrongQuestions.find(item => item.id === questionId) : null;
 
-    const chatPractice = buildChatPracticeData(realStudentId, knowledgePointId);
-    const practiceQuestions = chatPractice.candidateQuestions && chatPractice.candidateQuestions.length
-      ? chatPractice.candidateQuestions
-      : questions;
+    let questions = [];
+    let mode = 'weak-point';
+    let title = '知识点专项补练';
 
-    const knowledgePoint = db.findById('knowledgePoints', knowledgePointId);
+    if (wrongQuestion) {
+      questions = [wrongQuestion];
+      mode = 'wrong-question';
+      title = '错题重做';
+    } else if (knowledgePointId && knowledgePointId !== 'custom') {
+      questions = ensurePracticeQuestionsForKnowledgePoint(student.id, knowledgePointId);
+
+      const kp = db.findById('knowledgePoints', knowledgePointId);
+      if (kp) {
+        title = `${kp.name} · 个性化补练`;
+      }
+    }
+
     const latestPractice = db.find('learningRecords')
-      .filter(record => record.studentId === realStudentId && record.recordType === 'practice' && record.knowledgePointId === knowledgePointId)
-      .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))[0] || null;
+      .filter(record => {
+        return (
+          record.studentId === student.id &&
+          record.recordType === 'practice' &&
+          record.knowledgePointId === knowledgePointId
+        );
+      })
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] || null;
 
     res.json({
       success: true,
       data: {
-        mode: 'weak-point',
-        title: knowledgePoint ? knowledgePoint.name + ' 专项补练' : '薄弱补练',
+        mode,
+        title,
         knowledgePointId,
         latestPractice,
-        chatPractice,
-        questions: practiceQuestions
+        chatPractice:
+          knowledgePointId && knowledgePointId !== 'custom'
+            ? buildChatPracticeData(student.id, knowledgePointId)
+            : null,
+        questions
       }
     });
   } catch (error) {
@@ -1109,168 +931,145 @@ router.post('/practice/:knowledgePointId/submit', (req, res) => {
   try {
     const studentId = req.headers['x-user-id'];
     const student = getStudentByUserId(studentId);
-    const realStudentId = student ? student.id : studentId;
     const { knowledgePointId } = req.params;
-    const { answers: questionAnswers, questionIds, mode, title } = req.body;
+    const { answers, questionIds, mode, title } = req.body;
 
     if (!student) {
       return res.status(404).json({ success: false, message: '学生不存在' });
     }
 
-    const targetQuestionIds = Array.isArray(questionIds) && questionIds.length > 0
-      ? questionIds
-      : Object.keys(questionAnswers || {});
+    const targetQuestionIds =
+      Array.isArray(questionIds) && questionIds.length
+        ? questionIds
+        : Object.keys(answers || {});
 
-    if (targetQuestionIds.length === 0) {
-      return res.status(400).json({ success: false, message: '缺少练习题目' });
-    }
+    const payload = calculateAnswerPayload(targetQuestionIds, answers || {});
+    const practiceQuestions = targetQuestionIds
+      .map(id => {
+        const question = db.findById('questions', id);
+        if (question) return question;
+        return {
+          id,
+          knowledgePoints: [deriveKnowledgePointId({ id, content: '', knowledgePoints: [] }, knowledgePointId)],
+          content: '',
+          type: 'fill'
+        };
+      })
+      .filter(Boolean);
 
-    const payload = calculateAnswerPayload(targetQuestionIds, questionAnswers || {});
-    const practiceQuestions = db.find('questions').filter(question => targetQuestionIds.includes(question.id));
-    const knowledgePointChanges = buildPracticeKnowledgePointChanges(practiceQuestions, payload.questionResults, knowledgePointId === 'custom' ? null : knowledgePointId);
-    const status = payload.hasSubjectiveQuestions ? 'submitted' : 'graded';
-    const submittedAt = new Date().toISOString();
-
-    const practiceAnswer = db.create('answers', {
-      assignmentId: null,
-      paperId: null,
-      classId: student.classId || null,
-      studentId: realStudentId,
-      answers: questionAnswers || {},
-      questionResults: payload.questionResults,
-      totalScore: payload.totalScore,
-      knowledgePointScores: payload.knowledgePointScores,
-      submittedAt,
-      status,
-      recordType: 'practice',
-      practiceMode: mode || 'weak-point',
-      knowledgePointId: knowledgePointId === 'custom' ? null : knowledgePointId,
-      title: title || '薄弱补练'
-    });
+    const knowledgePointChanges = buildPracticeKnowledgePointChanges(
+      practiceQuestions,
+      payload.questionResults,
+      knowledgePointId === 'custom' ? null : knowledgePointId
+    );
 
     const practiceRecord = createLearningRecord({
-      studentId: realStudentId,
-      source: 'practice',
+      studentId: student.id,
+      title: title || '个性化补练',
+      knowledgePointId,
       recordType: 'practice',
-      knowledgePointId: knowledgePointId === 'custom' ? null : knowledgePointId,
-      title: title || '薄弱补练',
-      score: payload.totalScore,
-      status,
-      completedAt: submittedAt,
-      answerId: practiceAnswer.id,
-      questionCount: payload.questionResults.length,
-      correctCount: payload.questionResults.filter(item => item.correct).length,
-      allCorrect: payload.questionResults.length > 0 && payload.questionResults.every(item => item.correct),
+      mode: mode || 'weak-point',
       questionIds: targetQuestionIds,
-      mode: mode || 'weak-point'
+      questionResults: payload.questionResults,
+      totalScore: payload.totalScore,
+      status: payload.hasSubjectiveQuestions ? 'pending_review' : 'completed',
+      allCorrect: payload.questionResults.length > 0 && payload.questionResults.every(item => item.correct),
+      knowledgePointChanges
     });
 
-    syncWrongQuestionStatusFromPractice(realStudentId, payload.questionResults, practiceRecord, mode || 'weak-point');
-
-    if (practiceRecord.recordType === 'practice' && practiceRecord.knowledgePointId) {
-      const sourceHomeworkRecords = db.find('learningRecords')
-        .filter(record => record.studentId === realStudentId && record.recordType === 'homework' && record.knowledgePointId === practiceRecord.knowledgePointId)
-        .sort((a, b) => new Date(b.completedAt || 0) - new Date(a.completedAt || 0));
-
-      if (sourceHomeworkRecords.length > 0) {
-        db.updateById('learningRecords', sourceHomeworkRecords[0].id, {
-          recommendationClearedAt: submittedAt
-        });
-      }
-    }
+    syncWrongQuestionStatusFromPractice(
+      student.id,
+      payload.questionResults,
+      practiceRecord,
+      mode || 'weak-point'
+    );
 
     res.json({
       success: true,
+      message: '练习提交成功',
       data: {
-        answerId: practiceAnswer.id,
-        recordId: practiceRecord.id,
-        totalScore: payload.totalScore,
+        ...practiceRecord,
         questionResults: payload.questionResults,
-        knowledgePointChanges,
-        status,
-        allCorrect: practiceRecord.allCorrect
-      },
-      message: '补练提交成功'
+        knowledgePointChanges
+      }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-router.get('/practice-recommendations', (req, res) => {
+router.post('/assignments/:id/submit', (req, res) => {
   try {
     const studentId = req.headers['x-user-id'];
     const student = getStudentByUserId(studentId);
-    const realStudentId = student ? student.id : studentId;
+    const { id } = req.params;
+    const { answers } = req.body;
 
-    const weakPoints = db.find('learningRecords')
-      .filter(record => record.studentId === realStudentId && record.recordType === 'practice' && record.knowledgePointId)
-      .reduce((acc, record) => {
-        if (!acc[record.knowledgePointId]) {
-          acc[record.knowledgePointId] = { practiceCount: 0, correctCount: 0 };
-        }
-        acc[record.knowledgePointId].practiceCount += record.questionCount || 0;
-        acc[record.knowledgePointId].correctCount += record.correctCount || 0;
-        return acc;
-      }, {});
-
-    const wrongQuestions = getWrongQuestionEntries(realStudentId);
-    const wrongKnowledgePointIds = [...new Set(wrongQuestions.flatMap(item => item.knowledgePoints || []))];
-
-    const recommendations = wrongKnowledgePointIds.map(kpId => {
-      const kp = db.findById('knowledgePoints', kpId);
-      const relatedWrongQuestions = wrongQuestions.filter(item => (item.knowledgePoints || []).includes(kpId));
-      const practiceState = weakPoints[kpId] || { practiceCount: 0, correctCount: 0 };
-      const chatPractice = buildChatPracticeData(realStudentId, kpId);
-
-      return {
-        knowledgePointId: kpId,
-        knowledgePointName: kp ? kp.name : '未知知识点',
-        masteryRate: practiceState.practiceCount > 0 ? Math.round(practiceState.correctCount / practiceState.practiceCount * 100) : 0,
-        wrongQuestions: relatedWrongQuestions,
-        recommendedQuestions: chatPractice.candidateQuestions.slice(0, 5),
-        practiceMode: 'smart-recommendation'
-      };
-    });
-
-    res.json({ success: true, data: recommendations });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// 错题本
-router.get('/wrong-questions', (req, res) => {
-  try {
-    const studentId = req.headers['x-user-id'];
-    const student = getStudentByUserId(studentId);
-    const realStudentId = student ? student.id : studentId;
-
-    const wrongQuestions = getWrongQuestionEntries(realStudentId);
-
-    res.json({ success: true, data: wrongQuestions });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-router.post('/wrong-questions/:questionId/master', (req, res) => {
-  try {
-    const studentId = req.headers['x-user-id'];
-    const student = getStudentByUserId(studentId);
-    const realStudentId = student ? student.id : studentId;
-    const { questionId } = req.params;
-
-    const question = db.findById('questions', questionId);
-    if (!question) {
-      return res.status(404).json({ success: false, message: '题目不存在' });
+    if (!student) {
+      return res.status(404).json({ success: false, message: '学生不存在' });
     }
 
-    const existed = db.findOne('masteredWrongQuestions', { studentId: realStudentId, questionId });
-    if (!existed) {
+    const assignment = db.findById('assignments', id);
+    if (!assignment) {
+      return res.status(404).json({ success: false, message: '作业不存在' });
+    }
+
+    const paper = assignment.paperId ? db.findById('papers', assignment.paperId) : null;
+    const questionIds = paper && Array.isArray(paper.questions)
+      ? paper.questions
+      : (Array.isArray(assignment.questionIds) ? assignment.questionIds : []);
+
+    const payload = calculateAnswerPayload(questionIds, answers || {});
+
+    const answerRecord = db.create('answers', {
+      assignmentId: assignment.id,
+      paperId: assignment.paperId || '',
+      classId: assignment.classId || '',
+      studentId: student.id,
+      questionResults: payload.questionResults,
+      totalScore: payload.totalScore,
+      status: payload.hasSubjectiveQuestions ? 'submitted' : 'graded',
+      submittedAt: new Date().toISOString(),
+      recordType: 'homework',
+      knowledgePointScores: payload.knowledgePointScores
+    });
+
+    payload.questionResults.forEach(item => {
+      if (!item.correct) {
+        markWrongQuestionAsActive(student.id, item.questionId);
+      }
+    });
+
+    res.json({ success: true, message: '提交成功', data: { answerId: answerRecord.id } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 标记已掌握
+router.post('/wrong-questions/:id/master', (req, res) => {
+  try {
+    const studentId = req.headers['x-user-id'];
+    const student = getStudentByUserId(studentId);
+    const { id } = req.params;
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: '学生不存在' });
+    }
+
+    const existed = db.findOne('masteredWrongQuestions', {
+      studentId: student.id,
+      questionId: id
+    });
+
+    if (existed) {
+      db.updateById('masteredWrongQuestions', existed.id, {
+        masteredAt: new Date().toISOString()
+      });
+    } else {
       db.create('masteredWrongQuestions', {
-        studentId: realStudentId,
-        questionId,
+        studentId: student.id,
+        questionId: id,
         masteredAt: new Date().toISOString()
       });
     }
@@ -1281,18 +1080,121 @@ router.post('/wrong-questions/:questionId/master', (req, res) => {
   }
 });
 
-router.post('/wrong-questions/:questionId/unmaster', (req, res) => {
+// 标记未掌握
+router.post('/wrong-questions/:id/unmaster', (req, res) => {
   try {
     const studentId = req.headers['x-user-id'];
     const student = getStudentByUserId(studentId);
-    const realStudentId = student ? student.id : studentId;
-    const { questionId } = req.params;
+    const { id } = req.params;
 
-    markWrongQuestionAsActive(realStudentId, questionId);
+    if (!student) {
+      return res.status(404).json({ success: false, message: '学生不存在' });
+    }
 
-    res.json({ success: true, message: '已回流到待巩固状态' });
+    markWrongQuestionAsActive(student.id, id);
+    res.json({ success: true, message: '已标记为待巩固' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 保存错题笔记
+router.post('/wrong-questions/:id/note', (req, res) => {
+  try {
+    const studentId = req.headers['x-user-id'];
+    const student = getStudentByUserId(studentId);
+    const { id } = req.params;
+    const { note } = req.body;
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: '学生不存在' });
+    }
+
+    const existed = db.findOne('masteredWrongQuestions', {
+      studentId: student.id,
+      questionId: id
+    });
+
+    if (existed) {
+      db.updateById('masteredWrongQuestions', existed.id, {
+        note: note || ''
+      });
+    } else {
+      db.create('masteredWrongQuestions', {
+        studentId: student.id,
+        questionId: id,
+        note: note || '',
+        masteredAt: null
+      });
+    }
+
+    res.json({ success: true, message: '笔记已保存' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 学习聊天助手
+router.post('/chat', async (req, res) => {
+  try {
+    const { message } = req.body;
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({ success: false, message: '消息内容不能为空' });
+    }
+
+    const settings = db.data.settings || {};
+    const apiKey = settings.llmApiKey || process.env.LLM_API_KEY;
+    const apiEndpoint = settings.llmApiEndpoint || process.env.LLM_API_ENDPOINT;
+    const model = settings.llmModel || process.env.LLM_MODEL || 'gpt-4o-mini';
+
+    if (!apiKey || !apiEndpoint) {
+      return res.json({
+        success: true,
+        data: {
+          reply: '当前尚未配置大模型接口，已为你切换到本地学习建议模式：建议先梳理题干条件，再结合错题本回顾易错点。',
+          fallback: true
+        }
+      });
+    }
+
+    const response = await axios.post(
+      apiEndpoint,
+      {
+        model,
+        messages: [
+          { role: 'system', content: '你是一名耐心的初中数学学习助手，请用中文回答。' },
+          { role: 'user', content: message }
+        ],
+        temperature: 0.7
+      },
+      {
+        headers: {
+          Authorization: 'Bearer ' + apiKey,
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000
+      }
+    );
+
+    const reply =
+      response.data &&
+      response.data.choices &&
+      response.data.choices[0] &&
+      response.data.choices[0].message
+        ? response.data.choices[0].message.content
+        : '暂时没有获取到回复，请稍后重试。';
+
+    res.json({ success: true, data: { reply } });
+  } catch (error) {
+    res.json({
+      success: true,
+      data: {
+        reply: '智能助教暂时繁忙，建议你先查看知识图谱中的薄弱点，并优先完成对应补练。',
+        fallback: true,
+        detail: error.message
+      }
+    });
   }
 });
 

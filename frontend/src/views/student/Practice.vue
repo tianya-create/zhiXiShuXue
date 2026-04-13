@@ -1,165 +1,287 @@
 <template>
   <div class="practice-page" v-loading="loading">
-    <div class="page-header">
-      <h2>薄弱补练</h2>
-      <p>{{ pageDesc }}</p>
+    <div class="page-header compact-header">
+      <div>
+        <h2>{{ practiceMeta.mode === 'wrong-question' ? '错题重做' : '个性化补练' }}</h2>
+        <p>{{ pageDesc }}</p>
+      </div>
+      <el-tag :type="practiceMeta.mode === 'wrong-question' ? 'danger' : 'warning'" effect="dark">
+        {{ practiceMeta.mode === 'wrong-question' ? '原地重做' : '知识点补练' }}
+      </el-tag>
     </div>
 
-    <el-card class="gradient-card overview-card" v-if="practiceMeta.title || practiceMeta.latestPractice || practiceMeta.chatPractice">
-      <div class="overview-head">
+    <el-card
+      v-if="practiceMeta.title || practiceMeta.chatPractice || practiceMeta.latestPractice"
+      class="hero-card gradient-card"
+    >
+      <div class="hero-main">
         <div>
-          <div class="overview-title">{{ practiceMeta.title || '专项练习' }}</div>
-          <div class="overview-subtitle">
-            {{ practiceMeta.mode === 'wrong-question' ? '错题将通过对话方式重新作答，提交后自动刷新掌握状态' : '每个知识点都会提供相关练习题，完成后自动判分并更新薄弱点与错题状态' }}
+          <div class="hero-kicker">
+            {{ practiceMeta.mode === 'wrong-question' ? 'WRONG QUESTION REDO' : 'SMART PRACTICE' }}
+          </div>
+          <div class="hero-title">{{ practiceMeta.title || '专项练习' }}</div>
+          <div class="hero-desc">
+            {{
+              practiceMeta.chatPractice && practiceMeta.chatPractice.openingMessage
+                ? practiceMeta.chatPractice.openingMessage
+                : pageDesc
+            }}
           </div>
         </div>
-        <el-tag :type="practiceMeta.mode === 'wrong-question' ? 'danger' : 'warning'">
-          {{ practiceMeta.mode === 'wrong-question' ? '错题重做' : '知识点补练' }}
-        </el-tag>
+
+        <div v-if="practiceMeta.latestPractice" class="hero-stat">
+          <div class="hero-stat-value">
+            {{ latestCorrectCount }}/{{ latestQuestionCount }}
+          </div>
+          <div class="hero-stat-label">最近一次正确题数</div>
+        </div>
       </div>
 
-      <div v-if="practiceMeta.chatPractice" class="chat-intro-panel">
-        <div class="chat-intro-title">智能推荐补练</div>
-        <div class="chat-intro-desc">{{ practiceMeta.chatPractice.openingMessage }}</div>
+      <div
+        v-if="practiceMeta.chatPractice && practiceMeta.chatPractice.knowledgePoint"
+        class="hero-meta"
+      >
+        <el-tag type="warning">
+          知识点：{{ practiceMeta.chatPractice.knowledgePoint.name }}
+        </el-tag>
+        <span>{{ practiceMeta.chatPractice.knowledgePoint.description }}</span>
+      </div>
+    </el-card>
 
-        <div v-if="practiceMeta.chatPractice.knowledgePoint" class="chat-kp-meta">
-          <el-tag type="warning">知识点：{{ practiceMeta.chatPractice.knowledgePoint.name }}</el-tag>
-          <span class="chat-kp-desc">{{ practiceMeta.chatPractice.knowledgePoint.description }}</span>
-        </div>
+    <div class="practice-layout">
+      <div class="main-column">
+        <el-card v-if="showOverview" class="overview-card gradient-card">
+          <template #header>
+            <div class="section-header">
+              <div>
+                <div class="section-title">薄弱板块总览</div>
+                <div class="section-desc">选择一个知识点，进入专项补练。</div>
+              </div>
+              <el-tag type="info">{{ relatedKnowledgePoints.length }} 个知识点</el-tag>
+            </div>
+          </template>
 
-        <div v-if="relatedKnowledgePoints.length" class="chat-section">
-          <div class="chat-section-title">薄弱板块知识练习题总览</div>
-          <div class="knowledge-point-list">
-            <div v-for="item in relatedKnowledgePoints" :key="item.id" class="knowledge-point-item">
-              <div class="knowledge-point-main">
-                <div class="knowledge-point-name-row">
-                  <span class="knowledge-point-name">{{ item.name }}</span>
-                  <el-tag v-if="item.id === practiceMeta.knowledgePointId" size="small" type="warning">当前补练</el-tag>
-                  <el-tag v-else-if="item.fromPractice" size="small" type="info" effect="plain">关联知识点</el-tag>
-                  <el-tag v-if="item.hasNewRecommendation" size="small" type="danger" effect="dark">新推荐</el-tag>
+          <div class="overview-list">
+            <div v-for="item in relatedKnowledgePoints" :key="item.id" class="overview-item">
+              <div class="overview-item-main">
+                <div class="overview-item-name-row">
+                  <span class="overview-item-name">{{ item.name }}</span>
                 </div>
-                <div v-if="item.description" class="knowledge-point-desc">{{ item.description }}</div>
-                <div class="knowledge-point-extra">
+                <div v-if="item.description" class="overview-item-desc">{{ item.description }}</div>
+                <div class="overview-item-meta">
                   <span>掌握度 {{ item.masteryRate }}%</span>
-                  <span>错误次数 {{ item.wrongCount }}</span>
+                  <span>错误 {{ item.wrongCount }}</span>
                   <span>练习题 {{ item.questionCount }}</span>
                 </div>
               </div>
-              <div class="knowledge-point-meta">
-                <span>{{ item.questionCount ? '已生成题目' : '待生成题目' }}</span>
-                <el-button type="primary" link @click="openKnowledgePointPractice(item)">查看补练</el-button>
+              <el-button type="primary" plain @click="openKnowledgePointPractice(item)">
+                开始补练
+              </el-button>
+            </div>
+          </div>
+        </el-card>
+
+        <el-card v-else class="question-card gradient-card">
+          <template #header>
+            <div class="section-header">
+              <div>
+                <div class="section-title">练习题目</div>
+                <div class="section-desc">提交后自动判分，并同步更新掌握状态。</div>
+              </div>
+              <el-tag type="info">共 {{ questions.length }} 题</el-tag>
+            </div>
+          </template>
+
+          <div v-if="questions.length" class="question-list">
+            <div v-for="(question, index) in questions" :key="question.id" class="question-item">
+              <div class="question-header">
+                <div class="question-title-row">
+                  <span class="question-index">第 {{ index + 1 }} 题</span>
+                  <el-tag size="small" effect="plain">{{ getQuestionTypeLabel(question.type) }}</el-tag>
+                  <el-tag size="small" effect="plain">{{ getDifficultyLabel(question.difficulty) }}</el-tag>
+                  <el-tag v-if="practiceMeta.mode === 'wrong-question'" size="small" type="danger">
+                    错题重做
+                  </el-tag>
+                </div>
+              </div>
+
+              <div class="question-content">{{ question.content }}</div>
+
+              <div v-if="question.options && question.options.length" class="option-list">
+                <div
+                  v-for="(option, optionIndex) in question.options"
+                  :key="optionIndex"
+                  class="option-item"
+                >
+                  {{ String.fromCharCode(65 + optionIndex) }}. {{ option }}
+                </div>
+              </div>
+
+              <el-input
+                v-model="answers[question.id]"
+                type="textarea"
+                :rows="question.type === 'shortAnswer' ? 4 : 2"
+                :placeholder="
+                  practiceMeta.mode === 'wrong-question'
+                    ? '请输入这道错题的重做答案'
+                    : '请输入你的答案'
+                "
+                class="question-answer"
+              />
+
+              <div
+                v-if="questionFeedbackMap[question.id]"
+                :class="[
+                  'question-feedback',
+                  questionFeedbackMap[question.id].correct ? 'is-correct' : 'is-wrong'
+                ]"
+              >
+                <div class="feedback-title">
+                  {{ questionFeedbackMap[question.id].correct ? '回答正确' : '回答有误' }}
+                </div>
+                <div>正确答案：{{ questionFeedbackMap[question.id].answer || '-' }}</div>
+                <div v-if="questionFeedbackMap[question.id].analysis">
+                  解析：{{ questionFeedbackMap[question.id].analysis }}
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <div v-if="practiceMeta.chatPractice.wrongQuestions && practiceMeta.chatPractice.wrongQuestions.length" class="chat-section">
-          <div class="chat-section-title">关联错题</div>
-          <div class="chat-chip-list">
-            <div v-for="wrong in practiceMeta.chatPractice.wrongQuestions" :key="wrong.id" class="chat-chip is-wrong">
-              {{ wrong.content }}
+          <el-empty v-else-if="!loading" description="当前没有可作答题目" />
+
+          <div v-if="questions.length" class="submit-bar">
+            <div class="submit-summary">
+              已作答 {{ answeredCount }} / {{ questions.length }} 题，提交后会同步更新掌握状态。
+            </div>
+            <div class="submit-actions">
+              <el-button @click="resetAnswers">清空答案</el-button>
+              <el-button type="primary" size="large" :loading="submitting" @click="submitPractice">
+                提交本次练习
+              </el-button>
             </div>
           </div>
-        </div>
+        </el-card>
 
-        <div v-if="questions.length" class="chat-section">
-          <div class="chat-section-title">本次补练内容</div>
-          <div class="practice-question-list">
-            <div v-for="(question, index) in questions" :key="question.id" class="practice-question-item">
-              <div class="practice-question-head">
-                <span>第 {{ index + 1 }} 题 · {{ getQuestionTypeLabel(question.type) }}</span>
-                <el-tag size="small" effect="plain">{{ getDifficultyLabel(question.difficulty) }}</el-tag>
+        <el-card v-if="resultVisible" class="result-card gradient-card">
+          <template #header>
+            <div class="section-header">
+              <div>
+                <div class="section-title">练习结果</div>
+                <div class="section-desc">本次补练结果统计与知识点掌握变化。</div>
               </div>
-              <div class="practice-question-content">{{ question.content }}</div>
+              <el-tag :type="resultData.allCorrect ? 'success' : 'warning'">
+                {{ resultData.allCorrect ? '已全部掌握' : '继续巩固' }}
+              </el-tag>
+            </div>
+          </template>
+
+          <div class="result-overview">
+            <div class="result-box">
+              <div class="result-box-label">总分</div>
+              <div class="result-box-value">{{ resultData.totalScore }}</div>
+            </div>
+            <div class="result-box">
+              <div class="result-box-label">状态</div>
+              <div class="result-box-value status">{{ getStatusText(resultData.status) }}</div>
+            </div>
+            <div class="result-box">
+              <div class="result-box-label">正确率</div>
+              <div class="result-box-value">{{ resultAccuracy }}%</div>
             </div>
           </div>
-        </div>
-      </div>
 
-      <div v-if="practiceMeta.latestPractice" class="latest-practice">
-        最近一次练习：{{ formatDate(practiceMeta.latestPractice.completedAt) }}
-        · 正确 {{ practiceMeta.latestPractice.correctCount }}/{{ practiceMeta.latestPractice.questionCount }}
-      </div>
-    </el-card>
-
-    <el-card class="gradient-card chat-card" v-if="chatMessages.length || chatCurrentQuestion || !loading">
-      <template #header>
-        <div class="card-header">
-          <span>{{ practiceMeta.mode === 'wrong-question' ? '重做对话' : '补练对话' }}</span>
-          <div class="chat-header-actions" v-if="practiceMeta.mode !== 'wrong-question'">
-            <el-tag type="info">已完成 {{ answeredQuestionIds.length }}/{{ totalChatQuestions }}</el-tag>
-            <el-button type="primary" :disabled="!canAskNextQuestion" @click="askNextQuestion">下一题</el-button>
-          </div>
-        </div>
-      </template>
-
-      <div class="chat-window">
-        <div v-for="(message, index) in chatMessages" :key="index" :class="['chat-message', message.role === 'assistant' ? 'is-assistant' : 'is-user']">
-          <div class="chat-bubble">{{ message.content }}</div>
-        </div>
-      </div>
-
-      <div class="chat-input-row" v-if="chatCurrentQuestion">
-        <el-input
-          v-model="chatAnswer"
-          type="textarea"
-          :rows="3"
-          :placeholder="practiceMeta.mode === 'wrong-question' ? '请输入这道错题的重做答案' : '请输入你的作答内容'"
-        />
-        <div class="chat-actions">
-          <el-button v-if="practiceMeta.mode !== 'wrong-question'" @click="askNextQuestion" :disabled="!canAskNextQuestion">换一题</el-button>
-          <el-button type="primary" @click="sendChatAnswer" :disabled="!chatAnswer.trim()">发送答案</el-button>
-        </div>
-      </div>
-
-      <el-empty v-else-if="!questions.length && !loading" description="当前没有可作答题目" />
-
-      <div class="chat-submit-bar" v-if="answeredQuestionIds.length">
-        <div class="submit-summary">已完成 {{ answeredQuestionIds.length }} 道题，提交后将自动判分，并同步更新薄弱点与错题状态。</div>
-        <el-button type="success" :loading="submitting" @click="submitPractice">提交本次补练</el-button>
-      </div>
-    </el-card>
-
-    <el-card v-if="resultVisible" class="gradient-card result-card">
-      <template #header>
-        <div class="card-header">
-          <span>本次结果</span>
-          <el-tag :type="resultData.allCorrect ? 'success' : 'warning'">
-            {{ resultData.allCorrect ? '已全部掌握' : '仍需继续巩固' }}
-          </el-tag>
-        </div>
-      </template>
-      <div class="result-summary">
-        <div class="result-score">得分 {{ resultData.totalScore }}</div>
-        <div class="result-status">状态：{{ getStatusText(resultData.status) }}</div>
-      </div>
-      <div v-if="resultData.knowledgePointChanges.length" class="kp-change-panel">
-        <div class="kp-change-title">薄弱知识点变化</div>
-        <div class="kp-change-list">
-          <div v-for="item in resultData.knowledgePointChanges" :key="item.knowledgePointId" class="kp-change-item">
-            <div class="kp-change-main">
-              <div class="kp-change-name-row">
-                <span class="kp-change-name">{{ item.knowledgePointName }}</span>
-                <el-tag size="small" :type="item.statusType">{{ item.statusLabel }}</el-tag>
-                <el-tag v-if="item.isInitialWeakPoint" size="small" type="danger" effect="plain">原始薄弱点</el-tag>
+          <div v-if="resultData.knowledgePointChanges.length" class="result-kp-list">
+            <div
+              v-for="item in resultData.knowledgePointChanges"
+              :key="item.knowledgePointId"
+              class="result-kp-item"
+            >
+              <div class="result-kp-main">
+                <div class="result-kp-name-row">
+                  <span class="result-kp-name">{{ item.knowledgePointName }}</span>
+                  <el-tag size="small" :type="item.statusType">{{ item.statusLabel }}</el-tag>
+                </div>
+                <div class="result-kp-meta">
+                  题目 {{ item.questionCount }} · 正确 {{ item.correctCount }} · 错误 {{ item.wrongCount }}
+                </div>
               </div>
-              <div class="kp-change-meta">
-                <span>题目 {{ item.questionCount }}</span>
-                <span>正确 {{ item.correctCount }}</span>
-                <span>错误 {{ item.wrongCount }}</span>
+              <div class="result-kp-rate">掌握度 {{ item.masteryAfter }}%</div>
+            </div>
+          </div>
+        </el-card>
+      </div>
+
+      <div class="side-column">
+        <el-card class="gradient-card summary-card">
+          <template #header>
+            <div class="section-title">补练统计</div>
+          </template>
+
+          <div class="summary-grid">
+            <div class="summary-box">
+              <div class="summary-label">已选题目</div>
+              <div class="summary-value">{{ questions.length }}</div>
+            </div>
+            <div class="summary-box">
+              <div class="summary-label">已作答</div>
+              <div class="summary-value">{{ answeredCount }}</div>
+            </div>
+            <div class="summary-box">
+              <div class="summary-label">正确率</div>
+              <div class="summary-value">{{ resultAccuracy }}%</div>
+            </div>
+            <div class="summary-box">
+              <div class="summary-label">模式</div>
+              <div class="summary-value mode">
+                {{ practiceMeta.mode === 'wrong-question' ? '重做' : '补练' }}
               </div>
             </div>
-            <div class="kp-change-rate">掌握度 {{ item.masteryAfter }}%</div>
           </div>
-        </div>
+        </el-card>
+
+        <el-card class="gradient-card progress-card">
+          <template #header>
+            <div class="section-title">学习进步</div>
+          </template>
+
+          <div v-if="resultData.knowledgePointChanges.length" class="progress-bars">
+            <div
+              v-for="item in resultData.knowledgePointChanges"
+              :key="item.knowledgePointId"
+              class="progress-item"
+            >
+              <div class="progress-item-head">
+                <span>{{ item.knowledgePointName }}</span>
+                <span>{{ item.masteryAfter }}%</span>
+              </div>
+              <div class="progress-track">
+                <div
+                  class="progress-after"
+                  :style="{ width: item.masteryAfter + '%' }"
+                ></div>
+              </div>
+              <div class="progress-meta">
+                正确 {{ item.correctCount }} / {{ item.questionCount }}
+              </div>
+            </div>
+          </div>
+          <el-empty v-else description="提交练习后可查看学习进步" />
+        </el-card>
+
+        <el-card class="gradient-card advice-card">
+          <template #header>
+            <div class="section-title">练习建议</div>
+          </template>
+
+          <div class="advice-list">
+            <div class="advice-item">先做基础题，再处理综合题，避免一开始被难题打乱节奏。</div>
+            <div class="advice-item">答错后优先回看题干条件与关键公式，而不是只记答案。</div>
+            <div class="advice-item">完成练习后建议回到知识图谱查看掌握度变化。</div>
+            <div class="advice-item">若同一知识点连续出错，建议转到错题本集中复盘。</div>
+          </div>
+        </el-card>
       </div>
-      <div class="result-list">
-        <div v-for="item in resultData.questionResults" :key="item.questionId" :class="['result-item', item.correct ? 'is-correct' : 'is-wrong']">
-          <span>{{ getQuestionTitle(item.questionId) }}</span>
-          <span>{{ item.correct ? '正确' : '错误' }} · {{ item.score }}分</span>
-        </div>
-      </div>
-    </el-card>
+    </div>
   </div>
 </template>
 
@@ -168,61 +290,55 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/utils/api'
-import dayjs from 'dayjs'
 
-var route = useRoute()
-var router = useRouter()
-var loading = ref(false)
-var submitting = ref(false)
-var questions = ref([])
-var answers = reactive({})
-var practiceMeta = reactive({
+const route = useRoute()
+const router = useRouter()
+
+const loading = ref(false)
+const submitting = ref(false)
+const questions = ref([])
+const answers = reactive({})
+const questionFeedbackMap = reactive({})
+
+const practiceMeta = reactive({
   mode: 'weak-point',
   title: '',
   knowledgePointId: '',
   latestPractice: null,
   chatPractice: null
 })
-var resultVisible = ref(false)
-var resultData = reactive({
+
+const resultVisible = ref(false)
+const resultData = reactive({
   totalScore: 0,
   questionResults: [],
   knowledgePointChanges: [],
   status: '',
   allCorrect: false
 })
-var chatMessages = ref([])
-var chatQuestionPool = ref([])
-var chatCurrentQuestion = ref(null)
-var chatAnswer = ref('')
-var answeredQuestionIds = ref([])
-var askedQuestionIds = ref([])
-var relatedKnowledgePoints = computed(function() {
-  var baseList = practiceMeta.chatPractice && Array.isArray(practiceMeta.chatPractice.relatedKnowledgePoints)
-    ? practiceMeta.chatPractice.relatedKnowledgePoints
-    : []
 
-  var map = {}
-  for (var i = 0; i < baseList.length; i++) {
-    var item = baseList[i]
+const relatedKnowledgePoints = computed(() => {
+  const baseList =
+    practiceMeta.chatPractice && Array.isArray(practiceMeta.chatPractice.relatedKnowledgePoints)
+      ? practiceMeta.chatPractice.relatedKnowledgePoints
+      : []
+
+  const map = {}
+
+  baseList.forEach((item) => {
     map[item.id] = {
       id: item.id,
       name: item.name,
       description: item.description || '',
-      questionCount: 0,
-      masteryRate: parseInt(item.masteryRate || 0),
-      wrongCount: item.wrongCount || 0,
-      hasNewRecommendation: !!item.hasNewRecommendation,
-      fromPractice: item.id !== practiceMeta.knowledgePointId,
-      appearedAfterPractice: item.id !== practiceMeta.knowledgePointId
+      questionCount: item.questionCount || 0,
+      masteryRate: parseInt(item.masteryRate || 0, 10),
+      wrongCount: item.wrongCount || 0
     }
-  }
+  })
 
-  for (var j = 0; j < questions.value.length; j++) {
-    var question = questions.value[j]
-    var kpIds = Array.isArray(question.knowledgePoints) ? question.knowledgePoints : []
-    for (var k = 0; k < kpIds.length; k++) {
-      var kpId = kpIds[k]
+  questions.value.forEach((question) => {
+    const kpIds = Array.isArray(question.knowledgePoints) ? question.knowledgePoints : []
+    kpIds.forEach((kpId) => {
       if (!map[kpId]) {
         map[kpId] = {
           id: kpId,
@@ -230,49 +346,65 @@ var relatedKnowledgePoints = computed(function() {
           description: '',
           questionCount: 0,
           masteryRate: 0,
-          wrongCount: 0,
-          hasNewRecommendation: false,
-          fromPractice: kpId !== practiceMeta.knowledgePointId,
-          appearedAfterPractice: true
+          wrongCount: 0
         }
       }
       map[kpId].questionCount += 1
-      if (kpId !== practiceMeta.knowledgePointId) {
-        map[kpId].fromPractice = true
-      }
-    }
-  }
+    })
+  })
 
-  return Object.keys(map).map(function(key) { return map[key] })
+  return Object.values(map)
 })
 
-var pageDesc = computed(function() {
+const showOverview = computed(() => !route.query.kpId && !route.query.questionId)
+
+const pageDesc = computed(() => {
   return practiceMeta.mode === 'wrong-question'
-    ? '错题将通过对话方式重新作答，提交后自动刷新掌握状态'
-    : '每个知识点都会提供相关练习题，完成后自动判分并更新薄弱点与错题状态'
+    ? '原地完成错题重做，答对后系统会自动标记为已掌握。'
+    : '系统根据薄弱知识点自动推送习题，提交后会同步更新掌握状态。'
 })
 
-var totalChatQuestions = computed(function() {
-  return questions.value.length
+const answeredCount = computed(() => {
+  return questions.value.filter((item) => String(answers[item.id] || '').trim()).length
 })
 
-var canAskNextQuestion = computed(function() {
-  return !!chatQuestionPool.value.length && !chatCurrentQuestion.value
+const resultAccuracy = computed(() => {
+  if (!resultData.questionResults.length) return 0
+  const correctCount = resultData.questionResults.filter(item => item.correct).length
+  return Math.round((correctCount / resultData.questionResults.length) * 100)
 })
 
-onMounted(function() {
+const latestQuestionCount = computed(() => {
+  if (!practiceMeta.latestPractice) return 0
+  const list = Array.isArray(practiceMeta.latestPractice.questionResults)
+    ? practiceMeta.latestPractice.questionResults
+    : (Array.isArray(practiceMeta.latestPractice.questionIds) ? practiceMeta.latestPractice.questionIds : [])
+  return list.length
+})
+
+const latestCorrectCount = computed(() => {
+  if (!practiceMeta.latestPractice) return 0
+  const list = Array.isArray(practiceMeta.latestPractice.questionResults)
+    ? practiceMeta.latestPractice.questionResults
+    : []
+  return list.filter(item => item.correct).length
+})
+
+onMounted(() => {
   syncPracticeByRoute()
 })
 
-watch(function() {
-  return [route.query.kpId, route.query.questionId]
-}, function() {
-  syncPracticeByRoute()
-})
+watch(
+  () => [route.query.kpId, route.query.questionId],
+  () => {
+    syncPracticeByRoute()
+  }
+)
 
 function syncPracticeByRoute() {
-  var kpId = route.query.kpId
-  var questionId = route.query.questionId
+  const kpId = route.query.kpId
+  const questionId = route.query.questionId
+
   if (questionId) {
     loadPractice(kpId || 'custom', questionId)
   } else if (kpId) {
@@ -282,580 +414,521 @@ function syncPracticeByRoute() {
   }
 }
 
+function resetState() {
+  questions.value = []
+  resultVisible.value = false
+
+  resultData.totalScore = 0
+  resultData.questionResults = []
+  resultData.knowledgePointChanges = []
+  resultData.status = ''
+  resultData.allCorrect = false
+
+  practiceMeta.mode = 'weak-point'
+  practiceMeta.title = ''
+  practiceMeta.knowledgePointId = ''
+  practiceMeta.latestPractice = null
+  practiceMeta.chatPractice = null
+
+  Object.keys(answers).forEach((key) => {
+    delete answers[key]
+  })
+
+  Object.keys(questionFeedbackMap).forEach((key) => {
+    delete questionFeedbackMap[key]
+  })
+}
+
 function loadWeakPointOverview() {
   resetState()
   loading.value = true
   practiceMeta.title = '薄弱知识板块总览'
 
   api.get('/student/weak-points')
-    .then(function(res) {
+    .then((res) => {
       if (res.success) {
-        var list = res.data || []
+        const list = res.data || []
         practiceMeta.chatPractice = {
           openingMessage: list.length
-            ? '这里展示了你当前所有薄弱知识点及对应练习题入口，可以直接进入任一板块开始补练。'
+            ? '选择一个薄弱知识点，直接开始专项补练。'
             : '当前还没有检测到需要补练的薄弱知识点，继续保持。',
           knowledgePoint: null,
-          relatedKnowledgePoints: list.map(function(item) {
-            return {
-              id: item.id,
-              name: item.name,
-              description: item.description || '',
-              masteryRate: item.masteryRate,
-              wrongCount: item.wrongCount || 0,
-              questionCount: item.practiceCount || 0,
-              hasNewRecommendation: !!item.hasNewRecommendation
-            }
-          }),
-          wrongQuestions: []
+          relatedKnowledgePoints: list.map((item) => ({
+            id: item.id,
+            name: item.name,
+            description: item.description || '',
+            masteryRate: item.masteryRate,
+            wrongCount: item.wrongCount || 0,
+            questionCount: item.practiceCount || 0
+          }))
         }
       }
     })
-    .catch(function(error) {
+    .catch((error) => {
       console.error('加载薄弱点总览失败:', error)
       ElMessage.error('加载薄弱点总览失败')
     })
-    .finally(function() {
+    .finally(() => {
       loading.value = false
     })
-}
-
-function resetState() {
-  questions.value = []
-  resultVisible.value = false
-  resultData.totalScore = 0
-  resultData.questionResults = []
-  resultData.knowledgePointChanges = []
-  resultData.status = ''
-  resultData.allCorrect = false
-  practiceMeta.mode = 'weak-point'
-  practiceMeta.title = ''
-  practiceMeta.knowledgePointId = ''
-  practiceMeta.latestPractice = null
-  practiceMeta.chatPractice = null
-  chatMessages.value = []
-  chatQuestionPool.value = []
-  chatCurrentQuestion.value = null
-  chatAnswer.value = ''
-  answeredQuestionIds.value = []
-  askedQuestionIds.value = []
-
-  var keys = Object.keys(answers)
-  for (var i = 0; i < keys.length; i++) {
-    delete answers[keys[i]]
-  }
 }
 
 function loadPractice(kpId, questionId) {
   resetState()
   loading.value = true
 
-  var url = '/student/practice/' + kpId
+  let url = `/student/practice/${kpId}`
   if (questionId) {
-    url += '?questionId=' + questionId
+    url += `?questionId=${questionId}`
   }
 
   api.get(url)
-    .then(function(res) {
+    .then((res) => {
       if (res.success && res.data) {
         practiceMeta.mode = res.data.mode || 'weak-point'
         practiceMeta.title = res.data.title || ''
-        practiceMeta.knowledgePointId = res.data.knowledgePointId || ''
+        practiceMeta.knowledgePointId = res.data.knowledgePointId || kpId || ''
         practiceMeta.latestPractice = res.data.latestPractice || null
         practiceMeta.chatPractice = res.data.chatPractice || null
-        questions.value = res.data.questions || []
-        chatQuestionPool.value = questions.value.slice()
-
-        if (practiceMeta.chatPractice && practiceMeta.chatPractice.openingMessage) {
-          chatMessages.value = [{ role: 'assistant', content: practiceMeta.chatPractice.openingMessage }]
-        } else {
-          chatMessages.value = [{ role: 'assistant', content: '我们开始补练吧，我会逐题和你对话。' }]
-        }
-
-        if (questions.value.length > 0) {
-          askNextQuestion()
-        }
+        questions.value = Array.isArray(res.data.questions) ? res.data.questions : []
       }
     })
-    .catch(function(error) {
-      console.error('加载失败:', error)
+    .catch((error) => {
+      console.error('加载练习失败:', error)
       ElMessage.error('加载练习失败')
     })
-    .finally(function() {
+    .finally(() => {
       loading.value = false
     })
 }
 
-function askNextQuestion() {
-  if (!chatQuestionPool.value.length) {
-    chatCurrentQuestion.value = null
-    chatMessages.value.push({ role: 'assistant', content: '当前推荐题目已经练完了，你可以直接提交本次补练。' })
-    return
-  }
-
-  chatCurrentQuestion.value = chatQuestionPool.value.shift()
-  chatMessages.value.push({
-    role: 'assistant',
-    content: buildQuestionPrompt(chatCurrentQuestion.value)
-  })
-  chatAnswer.value = ''
-}
-
-function buildQuestionPrompt(question) {
-  var prefix = practiceMeta.mode === 'wrong-question' ? '我们先重做这道错题：' : '请回答这一题：'
-  var optionText = ''
-
-  if (question.type === 'choice' && question.options && question.options.length) {
-    optionText = '\n' + question.options.map(function(opt, index) {
-      return String.fromCharCode(65 + index) + '. ' + opt
-    }).join('\n')
-  }
-
-  return prefix + question.content + optionText
-}
-
-function sendChatAnswer() {
-  if (!chatCurrentQuestion.value || !chatAnswer.value.trim()) {
-    return
-  }
-
-  var answerText = chatAnswer.value.trim()
-  var currentQuestion = chatCurrentQuestion.value
-  var standardAnswer = currentQuestion.answer || '略'
-
-  chatMessages.value.push({ role: 'user', content: answerText })
-  answers[currentQuestion.id] = answerText
-  if (answeredQuestionIds.value.indexOf(currentQuestion.id) === -1) {
-    answeredQuestionIds.value.push(currentQuestion.id)
-  }
-
-  chatMessages.value.push({
-    role: 'assistant',
-    content: buildPracticeFeedback(currentQuestion, answerText, standardAnswer)
-  })
-
-  chatCurrentQuestion.value = null
-  chatAnswer.value = ''
-
-  if (practiceMeta.mode !== 'wrong-question' && chatQuestionPool.value.length) {
-    chatMessages.value.push({ role: 'assistant', content: '如果准备好了，可以继续下一题。' })
-  }
-}
-
 function openKnowledgePointPractice(item) {
-  if (!item || !item.id) {
-    return
-  }
+  if (!item || !item.id) return
   router.push({ path: '/student/practice', query: { kpId: item.id } })
 }
 
-function buildPracticeFeedback(question, studentAnswer, standardAnswer) {
-  var normalizedStudent = String(studentAnswer || '').trim().toLowerCase()
-  var normalizedStandard = String(standardAnswer || '').trim().toLowerCase()
-  var isCorrect = normalizedStudent && normalizedStandard && normalizedStudent === normalizedStandard
-
+function buildQuestionAnalysis(question, isCorrect) {
+  if (isCorrect) {
+    return '本题作答正确，当前知识点状态已同步更新。'
+  }
   if (question.type === 'choice') {
-    return isCorrect
-      ? '回答正确，参考答案：' + standardAnswer + '。这道题你已经掌握得不错。'
-      : '这道题暂时答错了，参考答案是：' + standardAnswer + '。建议再看一下选项和题干关系。'
+    return '建议重新核对题干条件与各选项之间的对应关系。'
   }
-
   if (question.type === 'fill') {
-    return isCorrect
-      ? '填空结果正确，参考答案：' + standardAnswer + '。继续保持。'
-      : '答案暂时不对，参考答案是：' + standardAnswer + '。建议检查计算过程。'
+    return '建议检查计算过程、符号和结果是否完整。'
   }
+  return '建议对照标准答案梳理解题步骤，再重新组织思路。'
+}
 
-  return '我已经记录了你的作答。参考答案：' + standardAnswer + '。主观题更重要的是思路完整。'
+function resetAnswers() {
+  Object.keys(answers).forEach((key) => {
+    delete answers[key]
+  })
+  Object.keys(questionFeedbackMap).forEach((key) => {
+    delete questionFeedbackMap[key]
+  })
+  resultVisible.value = false
 }
 
 function submitPractice() {
-  var questionIds = answeredQuestionIds.value.slice()
+  const questionIds = questions.value
+    .map((item) => item.id)
+    .filter((id) => String(answers[id] || '').trim())
 
   if (questionIds.length === 0) {
     ElMessage.warning('请至少完成一道题')
     return
   }
 
-  ElMessageBox.confirm('确定提交本次补练吗？已完成 ' + questionIds.length + ' 道题', '提示')
-    .then(function() {
+  ElMessageBox.confirm(`确定提交本次练习吗？已作答 ${questionIds.length} 道题`, '提示')
+    .then(() => {
       submitting.value = true
-      return api.post('/student/practice/' + (route.query.kpId || 'custom') + '/submit', {
-        answers: answers,
-        questionIds: questionIds,
+      return api.post(`/student/practice/${practiceMeta.knowledgePointId || 'custom'}/submit`, {
+        answers: Object.keys(answers).reduce((acc, key) => {
+          if (String(answers[key] || '').trim()) {
+            acc[key] = String(answers[key]).trim()
+          }
+          return acc
+        }, {}),
+        questionIds,
         mode: practiceMeta.mode,
-        title: practiceMeta.title
+        title: practiceMeta.title || '个性化补练'
       })
     })
-    .then(function(res) {
+    .then((res) => {
       if (res && res.success) {
+        const data = res.data || {}
         resultVisible.value = true
-        resultData.totalScore = res.data.totalScore
-        resultData.questionResults = res.data.questionResults || []
-        resultData.knowledgePointChanges = res.data.knowledgePointChanges || []
-        resultData.status = res.data.status
-        resultData.allCorrect = !!res.data.allCorrect
-        ElMessage.success(res.message || '补练提交成功')
+        resultData.totalScore = data.totalScore || 0
+        resultData.questionResults = Array.isArray(data.questionResults) ? data.questionResults : []
+        resultData.knowledgePointChanges = Array.isArray(data.knowledgePointChanges) ? data.knowledgePointChanges : []
+        resultData.status = data.status || 'completed'
+        resultData.allCorrect = !!data.allCorrect
 
-        if (practiceMeta.mode === 'wrong-question') {
-          router.replace('/student/wrong-questions')
-        }
+        questions.value.forEach((question) => {
+          const result = resultData.questionResults.find(item => item.questionId === question.id)
+          if (result) {
+            questionFeedbackMap[question.id] = {
+              correct: !!result.correct,
+              answer:
+                question.type === 'choice'
+                  ? (question.answerDisplay || question.answer || '-')
+                  : (question.answer || '-'),
+              analysis: buildQuestionAnalysis(question, !!result.correct)
+            }
+          }
+        })
+
+        ElMessage.success(res.message || '提交成功')
       }
     })
-    .catch(function(error) {
+    .catch((error) => {
       if (error !== 'cancel') {
-        console.error('提交失败:', error)
-        ElMessage.error('提交失败')
+        console.error('提交练习失败:', error)
+        ElMessage.error('提交练习失败')
       }
     })
-    .finally(function() {
+    .finally(() => {
       submitting.value = false
     })
-}
-
-function getQuestionTitle(questionId) {
-  var question = questions.value.find(function(item) { return item.id === questionId })
-  return question ? question.content : questionId
 }
 
 function getQuestionTypeLabel(type) {
   if (type === 'choice') return '选择题'
   if (type === 'fill') return '填空题'
   if (type === 'shortAnswer') return '简答题'
-  return '??'
+  return '题目'
 }
 
 function getDifficultyLabel(level) {
-  if (level === 'easy') return '简单'
-  if (level === 'medium') return '中等'
-  if (level === 'hard') return '困难'
-  return '??'
+  if (level === 'easy') return '基础'
+  if (level === 'medium') return '提升'
+  if (level === 'hard') return '挑战'
+  return level || '常规'
 }
 
 function getStatusText(status) {
-  if (status === 'graded') return '已自动判分'
-  if (status === 'submitted') return '待教师批改'
+  if (status === 'completed') return '已完成'
+  if (status === 'pending_review') return '待批改'
   return status || '-'
-}
-
-function formatDate(date) {
-  return date ? dayjs(date).format('YYYY-MM-DD HH:mm') : '-'
 }
 </script>
 
 <style scoped>
-.overview-card,
-.result-card,
-.chat-card {
-  margin-bottom: 20px;
+.practice-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
-.overview-head,
-.card-header {
+.compact-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-}
-
-.chat-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.overview-title {
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.overview-subtitle,
-.latest-practice,
-.result-status,
-.chat-intro-desc,
-.chat-kp-desc,
-.submit-summary {
-  color: #6b7280;
-}
-
-.chat-intro-panel {
-  margin-top: 14px;
-  padding: 14px 16px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #fff7e6, #fff1f0);
-}
-
-.chat-intro-title,
-.chat-section-title {
-  font-size: 14px;
-  font-weight: 700;
-  margin-bottom: 8px;
-}
-
-.chat-kp-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  gap: 16px;
   flex-wrap: wrap;
-  margin-top: 10px;
 }
 
-.chat-section {
-  margin-top: 14px;
+.gradient-card {
+  border-radius: 24px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: linear-gradient(145deg, rgba(255,255,255,0.98), rgba(247,250,255,0.96));
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
 }
 
-.chat-chip-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.hero-card {
+  padding: 24px 26px;
 }
 
-.chat-chip {
-  padding: 8px 10px;
-  border-radius: 999px;
-  background: #f5f7fa;
-  font-size: 12px;
-}
-
-.chat-chip.is-wrong {
-  background: #fff1f0;
-  color: #c45656;
-}
-
-.knowledge-point-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.knowledge-point-item {
+.hero-main {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: #ffffff;
-  border: 1px solid #f1f5f9;
-}
-
-.knowledge-point-main {
-  flex: 1;
-}
-
-.knowledge-point-name-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.knowledge-point-name {
-  font-weight: 700;
-  color: #1f2937;
-}
-
-.knowledge-point-desc,
-.knowledge-point-meta,
-.knowledge-point-extra {
-  margin-top: 6px;
-  color: #6b7280;
-  font-size: 13px;
-}
-
-.knowledge-point-extra {
-  margin-top: 6px;
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.knowledge-point-meta {
-  min-width: 120px;
-  text-align: right;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.practice-question-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.practice-question-item {
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: #ffffff;
-  border: 1px solid #f1f5f9;
-}
-
-.practice-question-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
-  font-size: 13px;
-  color: #6b7280;
-}
-
-.practice-question-content {
-  color: #1f2937;
-  line-height: 1.7;
-}
-
-.latest-practice {
-  margin-top: 12px;
-}
-
-.chat-window {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-height: 420px;
-  overflow: auto;
-  margin-bottom: 16px;
-}
-
-.chat-message {
-  display: flex;
-}
-
-.chat-message.is-assistant {
-  justify-content: flex-start;
-}
-
-.chat-message.is-user {
-  justify-content: flex-end;
-}
-
-.chat-bubble {
-  max-width: 78%;
-  padding: 10px 14px;
-  border-radius: 14px;
-  line-height: 1.6;
-  background: #f5f7fa;
-  white-space: pre-wrap;
-}
-
-.chat-message.is-user .chat-bubble {
-  background: #ecf5ff;
-}
-
-.chat-input-row {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.chat-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.chat-submit-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid #ebeef5;
-}
-
-.result-summary {
-  display: flex;
   gap: 24px;
-  margin-bottom: 16px;
-}
-
-.result-score {
-  font-size: 24px;
-  font-weight: 700;
-}
-
-.kp-change-panel {
-  margin-bottom: 18px;
-  padding: 16px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #f0f9ff, #f8fafc);
-}
-
-.kp-change-title {
-  font-size: 15px;
-  font-weight: 700;
-  margin-bottom: 12px;
-}
-
-.kp-change-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.kp-change-item {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-}
-
-.kp-change-main {
-  flex: 1;
-}
-
-.kp-change-name-row,
-.kp-change-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   flex-wrap: wrap;
 }
 
-.kp-change-name {
-  font-weight: 700;
+.hero-kicker {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: #2563eb;
+}
+
+.hero-title {
+  margin-top: 8px;
+  font-size: 28px;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.hero-desc {
+  margin-top: 12px;
+  color: #64748b;
+  line-height: 1.85;
+}
+
+.hero-stat {
+  min-width: 140px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(37, 99, 235, 0.06);
+  border: 1px solid rgba(37, 99, 235, 0.12);
+}
+
+.hero-stat-value {
+  font-size: 30px;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.hero-stat-label {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.hero-meta {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: #64748b;
+}
+
+.practice-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) 320px;
+  gap: 20px;
+}
+
+.main-column,
+.side-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 800;
   color: #111827;
 }
 
-.kp-change-meta {
-  margin-top: 8px;
+.section-desc,
+.overview-item-desc,
+.overview-item-meta,
+.submit-summary,
+.result-kp-meta,
+.progress-meta,
+.advice-item {
   color: #6b7280;
-  font-size: 13px;
+  line-height: 1.8;
 }
 
-.kp-change-rate {
-  font-size: 16px;
-  font-weight: 700;
-  color: #2563eb;
-  white-space: nowrap;
-}
-
-.result-list {
+.overview-list,
+.question-list,
+.result-kp-list,
+.progress-bars,
+.advice-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
 }
 
-.result-item {
+.overview-item,
+.question-item,
+.result-kp-item,
+.advice-item {
+  border-radius: 18px;
+  padding: 18px 20px;
+  background: linear-gradient(135deg, #ffffff, #f8fbff);
+  border: 1px solid #e8eef8;
+  box-shadow: 0 10px 24px rgba(31, 41, 55, 0.06);
+}
+
+.overview-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.overview-item-name-row,
+.result-kp-name-row,
+.question-title-row,
+.progress-item-head,
+.submit-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.overview-item-name,
+.result-kp-name {
+  font-size: 16px;
+  font-weight: 800;
+  color: #111827;
+}
+
+.question-header {
   display: flex;
   justify-content: space-between;
-  padding: 12px 14px;
-  border-radius: 8px;
+  gap: 12px;
 }
 
-.result-item.is-correct {
-  background: #f0f9eb;
-  color: #67c23a;
+.question-index {
+  font-weight: 800;
+  color: #2563eb;
 }
 
-.result-item.is-wrong {
-  background: #fef0f0;
-  color: #f56c6c;
+.question-content {
+  margin-top: 14px;
+  color: #111827;
+  font-size: 16px;
+  line-height: 1.85;
+  font-weight: 500;
+}
+
+.option-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.option-item {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #374151;
+}
+
+.question-answer {
+  margin-top: 16px;
+}
+
+.question-feedback {
+  margin-top: 14px;
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+
+.question-feedback.is-correct {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.question-feedback.is-wrong {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.feedback-title {
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.submit-bar {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.result-overview,
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.summary-grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.result-box,
+.summary-box {
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(37, 99, 235, 0.05);
+  border: 1px solid rgba(37, 99, 235, 0.08);
+}
+
+.result-box-label,
+.summary-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.result-box-value,
+.summary-value {
+  margin-top: 8px;
+  font-size: 26px;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.summary-value.mode,
+.result-box-value.status {
+  font-size: 20px;
+}
+
+.result-kp-item,
+.progress-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.result-kp-rate {
+  font-weight: 800;
+  color: #2563eb;
+}
+
+.progress-track {
+  margin-top: 8px;
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #e5e7eb;
+}
+
+.progress-after {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #2563eb, #0ea5e9);
+}
+
+.advice-item {
+  border: 1px solid #e5e7eb;
+}
+
+@media (max-width: 1200px) {
+  .practice-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .result-overview,
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
