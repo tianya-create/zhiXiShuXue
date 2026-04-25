@@ -56,6 +56,7 @@
 import { reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '@/utils/api'
+import * as XLSX from 'xlsx'
 
 var stats = reactive({
   userCount: 0,
@@ -93,14 +94,97 @@ function exportData(type) {
   api.get('/admin/export/' + type)
     .then(function(res) {
       if (res.success) {
-        var blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' })
-        var url = URL.createObjectURL(blob)
-        var link = document.createElement('a')
-        link.href = url
+        var data = res.data
+        var worksheet
+        var headers
+        var rows
+        
+        // 根据不同类型处理数据
+        switch (type) {
+          case 'users':
+            headers = ['ID', '用户名', '角色', '姓名', '邮箱', '电话', '创建时间']
+            rows = data.map(user => [
+              user.id,
+              user.username,
+              user.role === 'admin' ? '管理员' : user.role === 'teacher' ? '教师' : '学生',
+              user.name || '',
+              user.email || '',
+              user.phone || '',
+              user.createdAt || ''
+            ])
+            break
+          case 'students':
+            headers = ['ID', '姓名', '学号', '性别', '班级', '创建时间']
+            rows = data.map(student => [
+              student.id,
+              student.name,
+              student.studentNo,
+              student.gender === 'male' ? '男' : '女',
+              student.classId || '',
+              student.createdAt || ''
+            ])
+            break
+          case 'teachers':
+            headers = ['ID', '姓名', '工号', '邮箱', '电话', '创建时间']
+            rows = data.map(teacher => [
+              teacher.id,
+              teacher.name,
+              teacher.teacherNo || '',
+              teacher.email || '',
+              teacher.phone || '',
+              teacher.createdAt || ''
+            ])
+            break
+          case 'classes':
+            headers = ['ID', '班级名称', '年级', '教师ID', '学生数量', '创建时间']
+            rows = data.map(cls => [
+              cls.id,
+              cls.name,
+              cls.grade,
+              cls.teacherId,
+              cls.students ? cls.students.length : 0,
+              cls.createdAt || ''
+            ])
+            break
+          case 'papers':
+            headers = ['ID', '试卷名称', '教师ID', '班级ID', '题目数量', '创建时间']
+            rows = data.map(paper => [
+              paper.id,
+              paper.title,
+              paper.teacherId,
+              paper.classId || '',
+              paper.questions ? paper.questions.length : 0,
+              paper.createdAt || ''
+            ])
+            break
+          case 'answers':
+            headers = ['ID', '作业ID', '试卷ID', '班级ID', '学生ID', '得分', '状态', '提交时间']
+            rows = data.map(answer => [
+              answer.id,
+              answer.assignmentId,
+              answer.paperId,
+              answer.classId,
+              answer.studentId,
+              answer.totalScore || 0,
+              answer.status === 'submitted' ? '已提交' : answer.status === 'graded' ? '已批改' : answer.status,
+              answer.submittedAt || ''
+            ])
+            break
+          default:
+            ElMessage.error('不支持的导出类型')
+            return
+        }
+        
+        // 创建工作簿和工作表
+        var workbook = XLSX.utils.book_new()
+        var ws_data = [headers, ...rows]
+        worksheet = XLSX.utils.aoa_to_sheet(ws_data)
+        XLSX.utils.book_append_sheet(workbook, worksheet, type)
+        
+        // 导出Excel文件
         var date = new Date().toISOString().slice(0, 10)
-        link.download = type + '_' + date + '.json'
-        link.click()
-        URL.revokeObjectURL(url)
+        XLSX.writeFile(workbook, type + '_' + date + '.xlsx')
+        
         ElMessage.success('导出成功')
       }
     })
