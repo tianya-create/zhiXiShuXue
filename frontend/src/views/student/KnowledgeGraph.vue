@@ -1,6 +1,5 @@
 <template>
   <div class="kg-page">
-<<<<<<< HEAD
     <header class="page-header">
       <div class="header-content">
         <div class="header-text">
@@ -12,17 +11,6 @@
         </div>
       </div>
     </header>
-=======
-    <div class="kg-header">
-      <div>
-        <h2>知识图谱</h2>
-        <p>以“初中数学”为根节点，展开五大模块与具体知识点，节点颜色表示掌握状态。</p>
-      </div>
-      <div class="kg-tools">
-        <el-button @click="loadData">重新加载</el-button>
-      </div>
-    </div>
->>>>>>> cbf2bf5ff1ad4039f7a82832d33c326f6f497333
 
     <el-card class="gradient-card summary-card" v-loading="loading">
       <div class="summary-row">
@@ -309,12 +297,8 @@ onBeforeUnmount(() => { if (chart) chart.dispose() })
 
 <style scoped>
 .kg-page { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
-<<<<<<< HEAD
 .header-content { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
 .header-text { flex: 1; }
-=======
-.kg-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
->>>>>>> cbf2bf5ff1ad4039f7a82832d33c326f6f497333
 .kg-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .gradient-card { border-radius: 20px; }
 .summary-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }

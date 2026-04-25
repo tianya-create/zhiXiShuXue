@@ -38,7 +38,7 @@
             {{ scope.row.score !== undefined ? scope.row.score : '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200">
+        <el-table-column label="操作" width="120">
           <template #default="scope">
             <el-button
               type="primary"
@@ -46,14 +46,6 @@
               @click="scope.row.submitted ? viewResult(scope.row) : startAssignment(scope.row)"
             >
               {{ scope.row.submitted ? '查看结果' : '开始答题' }}
-            </el-button>
-            <el-button
-              v-if="scope.row.hasPdfPaper && scope.row.paperFilePath"
-              type="info"
-              size="small"
-              @click="viewPaper(scope.row)"
-            >
-              查看试卷
             </el-button>
           </template>
         </el-table-column>
@@ -103,24 +95,6 @@ function viewResult(row) {
 
 function formatDate(date) {
   return date ? dayjs(date).format('YYYY-MM-DD HH:mm') : '未设置'
-}
-
-function getFilePreviewUrl(filePath) {
-  if (!filePath) return ''
-  if (/^https?:\/\//i.test(filePath)) return filePath
-
-  var origin = window.location.origin
-  if (origin.indexOf(':5000') !== -1) {
-    origin = origin.replace(':5000', ':5001')
-  }
-
-  return origin + filePath
-}
-
-function viewPaper(row) {
-  if (!row || !row.paperFilePath || !row.hasPdfPaper) return
-  var url = getFilePreviewUrl(row.paperFilePath)
-  window.open(url, '_blank')
 }
 </script>
 

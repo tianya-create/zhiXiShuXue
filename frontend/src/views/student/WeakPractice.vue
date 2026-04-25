@@ -1,6 +1,5 @@
 <template>
   <div class="weak-practice-page">
-<<<<<<< HEAD
     <header class="page-header">
       <div class="header-content">
         <div class="header-text">
@@ -10,15 +9,6 @@
         <el-button type="primary" :loading="loading" @click="loadRecommendations(true)">换一批</el-button>
       </div>
     </header>
-=======
-    <div class="header-row">
-      <div>
-        <h2>{{ pageTitle }}</h2>
-        <p>{{ pageDesc }}</p>
-      </div>
-      <el-button type="primary" :loading="loading" @click="loadRecommendations(true)">换一批</el-button>
-    </div>
->>>>>>> cbf2bf5ff1ad4039f7a82832d33c326f6f497333
 
     <el-empty v-if="!loading && !questions.length" description="恭喜！当前暂无新的补练题目" />
 
@@ -194,12 +184,8 @@ onMounted(() => loadRecommendations(false))
 
 <style scoped>
 .weak-practice-page { padding: 24px; }
-<<<<<<< HEAD
 .header-content { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .header-text { flex: 1; }
-=======
-.header-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 18px; }
->>>>>>> cbf2bf5ff1ad4039f7a82832d33c326f6f497333
 .recommend-card { margin-bottom: 16px; border-radius: 18px; }
 .reason { margin-bottom: 12px; color: #92400e; background: #fffbeb; border-radius: 12px; padding: 10px 12px; }
 .question-no { font-size: 13px; color: #2563eb; font-weight: 700; margin-bottom: 8px; }

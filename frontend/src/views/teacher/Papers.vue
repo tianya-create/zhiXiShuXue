@@ -308,7 +308,6 @@ function submitQuestion() {
 }
 
 function getStatusType(status) {
-  if (status === 'published') return 'success'
   if (status === 'pending') return 'info'
   if (status === 'processing') return 'warning'
   if (status === 'completed') return 'success'
@@ -316,7 +315,6 @@ function getStatusType(status) {
 }
 
 function getStatusText(status) {
-  if (status === 'published') return '已发布'
   if (status === 'pending') return '待处理'
   if (status === 'processing') return '处理中'
   if (status === 'completed') return '已完成'

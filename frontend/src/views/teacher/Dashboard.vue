@@ -22,20 +22,26 @@
 
       <div class="stat-card">
         <div class="stat-icon" style="background: var(--info-bg); color: var(--info-500);">
+          <el-icon :size="22"><Document /></el-icon>
         </div>
+        <div class="stat-value">{{ stats.paperCount }}</div>
+        <div class="stat-label">试卷总数</div>
       </div>
 
       <div class="stat-card">
         <div class="stat-icon" style="background: var(--danger-bg); color: var(--danger-500);">
-         </div>
-      <div class="stat-card is-gradient-green">
-        <div class="stat-icon">
+          <el-icon :size="22"><Edit /></el-icon>
+        </div>
+        <div class="stat-value">{{ stats.pendingCount }}</div>
+        <div class="stat-label">待批改</div>
+      </div>
 
+      <div class="stat-card">
+        <div class="stat-icon" style="background: var(--success-bg); color: var(--success-500);">
           <el-icon :size="22"><TrendCharts /></el-icon>
         </div>
         <div class="stat-value">{{ stats.avgScore }}%</div>
         <div class="stat-label">平均正确率</div>
-      </div>
       </div>
     </section>
 

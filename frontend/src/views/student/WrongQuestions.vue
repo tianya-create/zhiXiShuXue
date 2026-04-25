@@ -1,6 +1,5 @@
 <template>
   <div class="wrong-page">
-<<<<<<< HEAD
     <header class="page-header">
       <div class="header-content">
         <div class="header-text">
@@ -56,61 +55,6 @@
           </div>
         </div>
 
-=======
-    <div class="page-header-row">
-      <div>
-        <h2>错题本</h2>
-        <p>卡片化展示错题摘要，支持知识点、错误类型、掌握状态智能筛选。</p>
-      </div>
-      <el-radio-group v-model="sortBy" size="small">
-        <el-radio-button label="time">按最后练习时间</el-radio-button>
-        <el-radio-button label="count">按错误次数</el-radio-button>
-      </el-radio-group>
-    </div>
-
-    <el-card class="filter-card">
-      <el-form :inline="true">
-        <el-form-item label="知识点">
-          <el-select v-model="filters.kpCode" clearable placeholder="全部知识点" style="width: 180px">
-            <el-option v-for="item in kpOptions" :key="item" :label="item" :value="item" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="错误类型">
-          <el-select v-model="filters.errorType" clearable placeholder="全部类型" style="width: 160px">
-            <el-option label="计算" value="计算" />
-            <el-option label="概念" value="概念" />
-            <el-option label="审题" value="审题" />
-            <el-option label="其他" value="其他" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="掌握状态">
-          <el-select v-model="filters.masteryStatus" clearable placeholder="全部状态" style="width: 160px">
-            <el-option label="待强化" value="待强化" />
-            <el-option label="待巩固" value="待巩固" />
-            <el-option label="已掌握" value="已掌握" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-    </el-card>
-
-    <div v-loading="loading" class="wrong-list">
-      <el-card v-for="item in filteredList" :key="item.questionId" class="wrong-card" shadow="hover">
-        <div class="wrong-card-top">
-          <div>
-            <div class="summary">{{ item.content }}</div>
-            <div class="meta-row">
-              <el-tag size="small">{{ item.kpCode || '未分类' }}</el-tag>
-              <el-tag size="small" type="warning">{{ item.errorType || '其他' }}</el-tag>
-              <el-tag size="small" :type="statusType(item.masteryStatus)">{{ item.masteryStatus || '待强化' }}</el-tag>
-            </div>
-          </div>
-          <div class="side-meta">
-            <div>错误次数 {{ item.wrongCount || 1 }}</div>
-            <div>{{ formatTime(item.lastPracticeTime) }}</div>
-          </div>
-        </div>
-
->>>>>>> cbf2bf5ff1ad4039f7a82832d33c326f6f497333
         <el-collapse>
           <el-collapse-item title="查看详情">
             <div class="detail-box">
@@ -187,12 +131,8 @@ onMounted(loadData)
 
 <style scoped>
 .wrong-page { padding: 24px; }
-<<<<<<< HEAD
 .header-content { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
 .header-text { flex: 1; }
-=======
-.page-header-row { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 16px; }
->>>>>>> cbf2bf5ff1ad4039f7a82832d33c326f6f497333
 .filter-card { margin-bottom: 16px; border-radius: 16px; }
 .wrong-list { display: grid; gap: 16px; }
 .wrong-card { border-radius: 18px; }

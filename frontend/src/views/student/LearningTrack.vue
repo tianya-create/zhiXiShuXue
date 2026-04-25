@@ -31,7 +31,6 @@
       <template #header>
         <div class="chart-header">
           <span>综合学情分析</span>
-<<<<<<< HEAD
           <div class="date-picker-wrapper">
             <el-date-picker
               v-model="dateRange"
@@ -43,17 +42,6 @@
               @change="handleDateRangeChange"
             />
           </div>
-=======
-          <el-date-picker
-            v-model="dateRange"
-            type="daterange"
-            range-separator="至"
-            start-placeholder="开始日期"
-            end-placeholder="结束日期"
-            size="small"
-            @change="handleDateRangeChange"
-          />
->>>>>>> cbf2bf5ff1ad4039f7a82832d33c326f6f497333
         </div>
       </template>
       <div id="combinedChart" style="height: 350px;"></div>
@@ -379,11 +367,8 @@ function formatDate(date) {
 
 .chart-main-card { margin-bottom: 20px; }
 .chart-header { display: flex; justify-content: space-between; align-items: center; }
-<<<<<<< HEAD
 .date-picker-wrapper { display: flex; justify-content: center; }
 .date-picker-wrapper :deep(.el-range-editor.el-input__wrapper) { width: 260px; }
-=======
->>>>>>> cbf2bf5ff1ad4039f7a82832d33c326f6f497333
 
 .track-card {
   padding: 16px;

@@ -294,7 +294,7 @@ function getDifficultyText(difficulty) {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 28px;
 }
 
 /* 页面头部 */
@@ -368,7 +368,7 @@ function getDifficultyText(difficulty) {
   background: var(--surface-raised);
   animation: slideUp var(--duration-slow) var(--ease-spring);
   animation-delay: 0.1s;
-  animation-fill-mode: backwards;
+  animation-fill-mode: both;
 }
 
 .panel-card:hover {
@@ -386,7 +386,6 @@ function getDifficultyText(difficulty) {
 .filters {
   display: flex;
   align-items: center;
-  gap: 16px;
 }
 
 /* 分页包装器 */
@@ -398,25 +397,26 @@ function getDifficultyText(difficulty) {
 
 /* 高级弹窗样式覆盖 */
 :deep(.el-dialog) {
-  border-radius: 24px !important;
+  border-radius: var(--radius-2xl) !important;
   overflow: hidden;
 }
 
 :deep(.el-dialog__header) {
   padding: 24px 28px;
-  background: white;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border-subtle);
   margin: 0;
 }
 
 :deep(.el-dialog__body) {
   padding: 28px;
+  background: var(--surface-raised);
 }
 
 :deep(.el-dialog__footer) {
   padding: 20px 28px;
-  background: var(--bg-hover);
-  border-top: 1px solid rgba(226, 232, 240, 0.6);
+  background: var(--surface-muted);
+  border-top: 1px solid var(--border-subtle);
 }
 
 :deep(.el-dialog::before) {
@@ -426,6 +426,6 @@ function getDifficultyText(difficulty) {
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #6366F1, #8B5CF6);
+  background: var(--brand-gradient);
 }
 </style>
