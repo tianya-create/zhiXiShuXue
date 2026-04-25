@@ -19,25 +19,25 @@
           
           <el-row :gutter="20" v-if="analytics">
             <el-col :span="6">
-              <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+              <div class="stat-card" style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); color: #1976d2;">
                 <div class="stat-value">{{ analytics.avgScore || 0 }}</div>
                 <div class="stat-label">平均分</div>
               </div>
             </el-col>
             <el-col :span="6">
-              <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+              <div class="stat-card" style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); color: #1976d2;">
                 <div class="stat-value">{{ analytics.studentCount || 0 }}</div>
                 <div class="stat-label">学生人数</div>
               </div>
             </el-col>
             <el-col :span="6">
-              <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+              <div class="stat-card" style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); color: #1976d2;">
                 <div class="stat-value">{{ analytics.completedCount || 0 }}</div>
                 <div class="stat-label">已完成作业</div>
               </div>
             </el-col>
             <el-col :span="6">
-              <div class="stat-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+              <div class="stat-card" style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); color: #1976d2;">
                 <div class="stat-value">{{ avgScorePercent }}%</div>
                 <div class="stat-label">平均正确率</div>
               </div>
@@ -293,5 +293,35 @@ function getLevelText(level) {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.stat-card {
+  padding: 24px;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  transition: all var(--duration-normal) var(--ease-spring);
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+}
+
+.stat-card:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-lg);
+}
+
+.stat-card .stat-value {
+  font-size: 36px;
+  font-weight: 800;
+  font-family: 'Noto Serif SC', serif;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+}
+
+.stat-card .stat-label {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.9;
 }
 </style>

@@ -12,7 +12,7 @@
 
     <!-- 统计卡片 -->
     <section class="stats-grid">
-      <div class="stat-card is-gradient-primary">
+      <div class="stat-card is-gradient">
         <div class="stat-icon">
           <el-icon :size="22"><User /></el-icon>
         </div>
@@ -20,28 +20,22 @@
         <div class="stat-label">学生总数</div>
       </div>
 
-      <div class="stat-card is-gradient-pink">
-        <div class="stat-icon">
-          <el-icon :size="22"><Document /></el-icon>
+      <div class="stat-card">
+        <div class="stat-icon" style="background: var(--info-bg); color: var(--info-500);">
         </div>
-        <div class="stat-value">{{ stats.paperCount }}</div>
-        <div class="stat-label">试卷总数</div>
       </div>
 
-      <div class="stat-card is-gradient-cyan">
-        <div class="stat-icon">
-          <el-icon :size="22"><Edit /></el-icon>
-        </div>
-        <div class="stat-value">{{ stats.pendingCount }}</div>
-        <div class="stat-label">待批改</div>
-      </div>
-
+      <div class="stat-card">
+        <div class="stat-icon" style="background: var(--danger-bg); color: var(--danger-500);">
+         </div>
       <div class="stat-card is-gradient-green">
         <div class="stat-icon">
+
           <el-icon :size="22"><TrendCharts /></el-icon>
         </div>
         <div class="stat-value">{{ stats.avgScore }}%</div>
         <div class="stat-label">平均正确率</div>
+      </div>
       </div>
     </section>
 
@@ -339,25 +333,33 @@ function loadData() {
 }
 
 /* 渐变统计卡片 */
-.stat-card.is-gradient-primary { background: linear-gradient(135deg, #6366F1, #8B5CF6); border: none; }
-.stat-card.is-gradient-primary .stat-icon { background: hsla(0, 0%, 100%, 0.2); color: white; }
-.stat-card.is-gradient-primary .stat-value, .stat-card.is-gradient-primary .stat-label { color: white; }
-.stat-card.is-gradient-primary::before { opacity: 1; }
+.stat-card.is-gradient {
+  background: var(--brand-gradient);
+  border: none;
+}
 
-.stat-card.is-gradient-pink { background: linear-gradient(135deg, #EC4899, #F472B6); border: none; }
-.stat-card.is-gradient-pink .stat-icon { background: hsla(0, 0%, 100%, 0.2); color: white; }
-.stat-card.is-gradient-pink .stat-value, .stat-card.is-gradient-pink .stat-label { color: white; }
-.stat-card.is-gradient-pink::before { opacity: 1; }
+.stat-card.is-gradient .stat-icon {
+  background: hsla(0, 0%, 100%, 0.2);
+  color: white;
+}
 
-.stat-card.is-gradient-cyan { background: linear-gradient(135deg, #06B6D4, #22D3EE); border: none; }
-.stat-card.is-gradient-cyan .stat-icon { background: hsla(0, 0%, 100%, 0.2); color: white; }
-.stat-card.is-gradient-cyan .stat-value, .stat-card.is-gradient-cyan .stat-label { color: white; }
-.stat-card.is-gradient-cyan::before { opacity: 1; }
+.stat-card.is-gradient .stat-value,
+.stat-card.is-gradient .stat-label {
+  color: white;
+}
 
-.stat-card.is-gradient-green { background: linear-gradient(135deg, #10B981, #34D399); border: none; }
-.stat-card.is-gradient-green .stat-icon { background: hsla(0, 0%, 100%, 0.2); color: white; }
-.stat-card.is-gradient-green .stat-value, .stat-card.is-gradient-green .stat-label { color: white; }
-.stat-card.is-gradient-green::before { opacity: 1; }
+.stat-card.is-gradient::before { opacity: 1; }
+
+.stat-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 100px;
+  height: 100px;
+  background: radial-gradient(circle at top right, hsla(var(--brand-hue), 84%, 68%, 0.04) 0%, transparent 70%);
+  pointer-events: none;
+}
 
 /* === 主内容布局 === */
 .dashboard-layout {

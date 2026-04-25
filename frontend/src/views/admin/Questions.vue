@@ -294,21 +294,21 @@ function getDifficultyText(difficulty) {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 24px;
 }
 
 /* 页面头部 */
 .page-header {
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--surface-overlay);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border-radius: 24px;
+  border-radius: var(--radius-xl);
   padding: 32px 36px;
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+  border: 1px solid hsla(0, 0%, 100%, 0.9);
+  box-shadow: var(--shadow-md);
   position: relative;
   overflow: hidden;
-  animation: slideUp 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: slideUp var(--duration-slow) var(--ease-spring);
 }
 
 @keyframes slideUp {
@@ -319,21 +319,18 @@ function getDifficultyText(difficulty) {
 .page-header::before {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: linear-gradient(90deg, #6366F1, #8B5CF6, #EC4899);
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--brand-gradient);
 }
 
 .page-header::after {
   content: '';
   position: absolute;
-  top: 0;
-  right: 0;
+  top: 0; right: 0;
   width: 300px;
   height: 100%;
-  background: radial-gradient(ellipse at top right, rgba(99, 102, 241, 0.05) 0%, transparent 70%);
+  background: radial-gradient(ellipse at top right, hsla(var(--brand-hue), 84%, 68%, 0.06) 0%, transparent 70%);
   pointer-events: none;
 }
 
@@ -364,17 +361,19 @@ function getDifficultyText(difficulty) {
 
 /* 面板卡片 */
 .panel-card {
-  border-radius: 20px !important;
-  border: 1px solid rgba(226, 232, 240, 0.6) !important;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04) !important;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-  animation: slideUp 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: var(--radius-xl) !important;
+  border: 1px solid var(--border-subtle) !important;
+  box-shadow: var(--shadow-sm) !important;
+  transition: all var(--duration-normal) var(--ease-spring) !important;
+  background: var(--surface-raised);
+  animation: slideUp var(--duration-slow) var(--ease-spring);
   animation-delay: 0.1s;
-  animation-fill-mode: both;
+  animation-fill-mode: backwards;
 }
 
 .panel-card:hover {
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08) !important;
+  box-shadow: var(--shadow-lg) !important;
+  transform: translateY(-2px);
 }
 
 .card-header {
@@ -387,6 +386,7 @@ function getDifficultyText(difficulty) {
 .filters {
   display: flex;
   align-items: center;
+  gap: 16px;
 }
 
 /* 分页包装器 */
