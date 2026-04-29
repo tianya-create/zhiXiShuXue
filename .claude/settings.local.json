@@ -16,8 +16,7 @@
       "Bash(ssh -T git@github.com)",
       "Bash(python3 .claude/skills/ui-ux-pro-max/scripts/search.py \"education math learning platform modern minimal premium\" --design-system -p \"智析数学\" -f markdown)",
       "Bash(python .claude/skills/ui-ux-pro-max/scripts/search.py \"education math learning platform modern minimal premium\" --design-system -p \"智析数学\" -f markdown)",
-      "mcp__ide__getDiagnostics",
-      "WebFetch(domain:localhost)"
+      "mcp__ide__getDiagnostics"
     ]
   }
 }

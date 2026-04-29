@@ -16,36 +16,36 @@
         </div>
       </template>
       
-      <el-table :data="assignments" style="width: 100%" v-loading="loading">
-        <el-table-column prop="title" label="作业名称" />
-        <el-table-column prop="paperTitle" label="试卷" width="180">
+      <el-table :data="assignments" style="width: 100%" v-loading="loading" :max-height="600">
+        <el-table-column prop="title" label="作业名称" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="paperTitle" label="试卷" width="150" show-overflow-tooltip>
           <template #default="scope">
             {{ scope.row.paperTitle || (scope.row.questionCount ? '题库组卷' : '-') }}
           </template>
         </el-table-column>
-        <el-table-column label="题目数" width="90">
+        <el-table-column label="题目数" width="80" align="center">
           <template #default="scope">
             {{ scope.row.questionCount || 0 }}
           </template>
         </el-table-column>
-        <el-table-column prop="className" label="班级" width="140" />
-        <el-table-column prop="answerCount" label="已提交人数" width="110" />
-        <el-table-column label="层次" width="180">
+        <el-table-column prop="className" label="班级" width="120" show-overflow-tooltip />
+        <el-table-column prop="answerCount" label="已提交" width="90" align="center" />
+        <el-table-column label="层次" width="120" show-overflow-tooltip>
           <template #default="scope">
             <span>{{ getLevelsText(scope.row.levels || scope.row.level) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="deadline" label="截止时间" width="180">
+        <el-table-column prop="deadline" label="截止时间" width="160" show-overflow-tooltip>
           <template #default="scope">
             {{ scope.row.deadline ? formatDate(scope.row.deadline) : '未设置' }}
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="100">
+        <el-table-column prop="status" label="状态" width="90" align="center">
           <template #default="scope">
             <el-tag type="success">{{ scope.row.status === 'published' ? '已发布' : '草稿' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180">
+        <el-table-column label="操作" width="140" align="center">
           <template #default="scope">
             <el-button type="primary" link @click="viewAssignment(scope.row)">查看</el-button>
             <el-button type="danger" link @click="deleteAssignment(scope.row)">删除</el-button>
@@ -54,7 +54,7 @@
       </el-table>
     </el-card>
     
-    <el-dialog v-model="dialogVisible" title="发布作业" width="760px">
+    <el-dialog v-model="dialogVisible" title="发布作业" width="900px">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="96px">
         <el-form-item label="作业名称" prop="title">
           <el-input v-model="form.title" placeholder="请输入作业名称" />
@@ -483,16 +483,95 @@ function formatDate(date) {
 </script>
 
 <style scoped>
+.assignment-management {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* === 页面头部 === */
+.page-header {
+  background: var(--surface-overlay);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: var(--radius-xl);
+  padding: 28px 32px;
+  border: 1px solid hsla(0, 0%, 100%, 0.9);
+  box-shadow: var(--shadow-md);
+  position: relative;
+  overflow: hidden;
+  animation: slideUp var(--duration-slow) var(--ease-spring);
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.page-header::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--brand-gradient);
+}
+
+.page-header::after {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 300px;
+  height: 100%;
+  background: radial-gradient(ellipse at top right, hsla(var(--brand-hue), 84%, 68%, 0.06) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.page-header h2 {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.page-header p {
+  margin: 12px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* === 面板卡片 === */
+.gradient-card {
+  border-radius: var(--radius-xl) !important;
+  border: 1px solid var(--border-subtle) !important;
+  box-shadow: var(--shadow-sm) !important;
+  transition: all var(--duration-normal) var(--ease-spring) !important;
+  background: var(--surface-raised);
+  animation: slideUp var(--duration-slow) var(--ease-spring);
+  animation-delay: 0.1s;
+  animation-fill-mode: both;
+}
+
+.gradient-card:hover {
+  box-shadow: var(--shadow-lg) !important;
+  transform: translateY(-2px);
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 4px 0;
 }
 
 .detail-subtitle {
   margin: 20px 0 12px;
   font-size: 16px;
   font-weight: 600;
+  color: var(--text-primary);
 }
 
 .form-tip {
@@ -527,10 +606,16 @@ function formatDate(date) {
 }
 
 .answer-question-card {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border-subtle);
   border-radius: 16px;
   padding: 16px;
-  background: linear-gradient(135deg, #ffffff, #f8fbff);
+  background: var(--surface-raised);
+  transition: all var(--duration-normal) var(--ease-spring);
+}
+
+.answer-question-card:hover {
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-2px);
 }
 
 .answer-question-head {
@@ -550,12 +635,12 @@ function formatDate(date) {
 
 .answer-question-score {
   font-weight: 700;
-  color: #2563eb;
+  color: var(--primary-500);
 }
 
 .answer-question-content {
   margin-top: 12px;
-  color: #111827;
+  color: var(--text-primary);
   font-size: 15px;
   line-height: 1.8;
 }
@@ -569,22 +654,124 @@ function formatDate(date) {
 .answer-option-item {
   padding: 10px 12px;
   border-radius: 10px;
-  background: #f8fafc;
-  color: #374151;
+  background: var(--surface-muted);
+  color: var(--text-regular);
+  transition: all var(--duration-fast) var(--ease-smooth);
+}
+
+.answer-option-item:hover {
+  background: var(--surface-base);
+  transform: translateX(4px);
 }
 
 .answer-meta-list {
   margin-top: 14px;
   display: grid;
   gap: 8px;
-  color: #4b5563;
+  color: var(--text-secondary);
 }
 
 .teacher-comment {
   margin-top: 10px;
   padding: 10px 12px;
   border-radius: 10px;
-  background: #f9fafb;
-  color: #374151;
+  background: var(--surface-muted);
+  color: var(--text-regular);
+}
+
+/* === 表格样式 === */
+:deep(.el-table) {
+  border-radius: var(--radius-lg) !important;
+  overflow: hidden;
+}
+
+:deep(.el-table__header-wrapper) {
+  background: var(--surface-muted);
+}
+
+:deep(.el-table th.el-table__cell) {
+  background: var(--surface-muted) !important;
+  font-weight: 600;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-default);
+}
+
+:deep(.el-table__row:hover > td.el-table__cell) {
+  background-color: var(--surface-muted) !important;
+}
+
+:deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) {
+  background: var(--surface-base);
+}
+
+/* === 弹窗样式 === */
+:deep(.el-dialog) {
+  border-radius: var(--radius-2xl) !important;
+  overflow: hidden;
+}
+
+:deep(.el-dialog__header) {
+  padding: 24px 28px;
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border-subtle);
+  margin: 0;
+}
+
+:deep(.el-dialog__body) {
+  padding: 28px;
+  background: var(--surface-raised);
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+:deep(.el-dialog__footer) {
+  padding: 20px 28px;
+  background: var(--surface-muted);
+  border-top: 1px solid var(--border-subtle);
+}
+
+:deep(.el-dialog::before) {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--brand-gradient);
+}
+
+/* === 响应式 === */
+@media (max-width: 1200px) {
+  .assignment-management {
+    padding: 16px;
+  }
+  
+  .page-header {
+    padding: 24px 28px;
+  }
+  
+  :deep(.el-dialog) {
+    width: 90% !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .page-header h2 {
+    font-size: 22px;
+  }
+  
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .question-filter-panel {
+    flex-direction: column;
+  }
+  
+  .question-filter-panel .el-select {
+    width: 100% !important;
+  }
 }
 </style>

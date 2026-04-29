@@ -81,8 +81,7 @@ function initializeData() {
     { id: 'student-006', username: 'student6', name: '赵强', gender: 'male', score: 72 },
     { id: 'student-007', username: 'student7', name: '孙丽', gender: 'female', score: 68 },
     { id: 'student-008', username: 'student8', name: '周杰', gender: 'male', score: 55 },
-    { id: 'student-009', username: 'student9', name: '吴敏', gender: 'female', score: 50 },
-    { id: 'student-010', username: 'student10', name: '郑华', gender: 'male', score: 85 }
+    { id: 'student-009', username: 'student9', name: '吴敏', gender: 'female', score: 50 }
   ];
 
   students.forEach((student, index) => {
