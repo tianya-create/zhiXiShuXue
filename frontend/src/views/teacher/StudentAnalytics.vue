@@ -60,40 +60,52 @@
       </el-descriptions>
     </el-card>
     
-    <el-row v-if="studentId" :gutter="20" class="chart-row">
-      <el-col :span="8">
-        <el-card class="gradient-card">
+    <div v-if="studentId" class="chart-row">
+      <div class="chart-col">
+        <el-card class="gradient-card chart-card">
           <template #header>成绩趋势</template>
-          <div id="scoreChart" style="height: 300px;"></div>
+          <div ref="scoreChartRef" class="chart-container"></div>
         </el-card>
-      </el-col>
-      <el-col :span="8">
-        <el-card class="gradient-card" id="knowledge-section">
+      </div>
+      <div class="chart-col">
+        <el-card class="gradient-card chart-card" id="knowledge-section">
           <template #header>知识点掌握分布</template>
-          <div id="knowledgeChart" style="height: 300px;"></div>
+          <div ref="knowledgeChartRef" class="chart-container"></div>
         </el-card>
-      </el-col>
-      <el-col :span="8">
-        <el-card class="gradient-card">
+      </div>
+      <div class="chart-col">
+        <el-card class="gradient-card chart-card">
           <template #header>综合能力雷达</template>
-          <div id="levelChart" style="height: 300px;"></div>
+          <div ref="levelChartRef" class="chart-container"></div>
         </el-card>
-      </el-col>
-    </el-row>
+      </div>
+    </div>
     
     <el-card v-if="studentId" id="wrong-questions-section" class="gradient-card wrong-section-card">
       <template #header>错题列表</template>
-      <el-table :data="wrongQuestions" max-height="400">
-        <el-table-column prop="content" label="题目内容" show-overflow-tooltip />
-        <el-table-column prop="correctAnswer" label="正确答案" width="120" />
-        <el-table-column prop="studentAnswer" label="学生答案" width="120" />
+      <el-table :data="wrongQuestions" max-height="400" class="safe-table wrong-table">
+        <el-table-column prop="content" label="题目内容" min-width="260">
+          <template #default="scope">
+            <span class="question-content">{{ scope.row.content }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="correctAnswer" label="正确答案" width="120">
+          <template #default="scope">
+            <span class="answer-text">{{ scope.row.correctAnswer }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="studentAnswer" label="学生答案" width="120">
+          <template #default="scope">
+            <span class="answer-text">{{ scope.row.studentAnswer }}</span>
+          </template>
+        </el-table-column>
       </el-table>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/utils/api'
 import * as echarts from 'echarts'
@@ -103,9 +115,13 @@ var router = useRouter()
 var loading = ref(false)
 var studentInfo = ref(null)
 var analytics = ref(null)
+var scoreChartRef = ref(null)
+var knowledgeChartRef = ref(null)
+var levelChartRef = ref(null)
 var scoreChart = null
 var knowledgeChart = null
 var levelChart = null
+var renderTimer = null
 
 var students = ref([])
 var searchQuery = ref('')
@@ -136,11 +152,24 @@ var filteredStudents = computed(function() {
 onMounted(function() {
   loadClasses()
   loadAnalytics()
+  window.addEventListener('resize', resizeCharts)
+})
+
+onBeforeUnmount(function() {
+  window.removeEventListener('resize', resizeCharts)
+  if (renderTimer) {
+    window.clearTimeout(renderTimer)
+  }
+  disposeCharts()
 })
 
 watch(studentId, function(newId) {
   if (newId) {
     loadAnalytics()
+  } else {
+    analytics.value = null
+    studentInfo.value = null
+    disposeCharts()
   }
 })
 
@@ -172,9 +201,9 @@ function loadStudents() {
 
 function loadAnalytics() {
   if (!studentId.value) return
-  
+
   loading.value = true
-  
+
   api.get('/teacher/analytics/student/' + studentId.value).then(function(res) {
     if (res.success) {
       studentInfo.value = res.data.student
@@ -202,96 +231,214 @@ function getKnowledgePointName(code) {
   return knowledgePointMap[code] || code
 }
 
+function getScoreValue(value) {
+  if (typeof value === 'number') return value
+  var parsed = parseFloat(value)
+  return isNaN(parsed) ? 0 : parsed
+}
+
+function getMasteryValue(item) {
+  var rawValue = item && typeof item === 'object' ? item.avgScore : item
+  var parsed = parseFloat(rawValue)
+  return isNaN(parsed) ? 0 : parsed
+}
+
+function getAverageMastery(mastery) {
+  var values = Object.keys(mastery).map(function(key) {
+    return getMasteryValue(mastery[key])
+  }).filter(function(value) {
+    return value > 0
+  })
+
+  if (values.length === 0) return 0
+  var sum = values.reduce(function(total, value) {
+    return total + value
+  }, 0)
+  return Math.round(sum / values.length)
+}
+
+function getChart(dom, chart) {
+  if (!dom) return null
+  if (!chart || chart.isDisposed()) {
+    return echarts.init(dom)
+  }
+  return chart
+}
+
 function renderCharts() {
-  var scoreDom = document.getElementById('scoreChart')
-  if (scoreDom) {
-    if (scoreChart) scoreChart.dispose()
-    scoreChart = echarts.init(scoreDom)
-
-    var trend = analytics.value && analytics.value.scoreTrend ? analytics.value.scoreTrend : []
-    var xData = []
-    var yData = []
-    for (var i = 0; i < trend.length; i++) {
-      var t = trend[i]
-      xData.push(t.date ? t.date.slice(5, 10) : '')
-      yData.push(t.score)
+  nextTick(function() {
+    if (renderTimer) {
+      window.clearTimeout(renderTimer)
     }
 
-    scoreChart.setOption({
-      tooltip: { trigger: 'axis' },
-      xAxis: { type: 'category', data: xData },
-      yAxis: { type: 'value' },
-      series: [{
-        name: '成绩',
-        type: 'line',
-        data: yData,
-        smooth: true,
-        lineStyle: { color: '#409EFF' },
-        areaStyle: { color: 'rgba(64, 158, 255, 0.1)' }
-      }]
-    })
+    renderTimer = window.setTimeout(function() {
+      var scoreDom = scoreChartRef.value
+      var knowledgeDom = knowledgeChartRef.value
+      var levelDom = levelChartRef.value
+
+      if (!scoreDom || !knowledgeDom || !levelDom || scoreDom.clientWidth === 0) {
+        return
+      }
+
+      var data = analytics.value || {}
+      var mastery = data.knowledgePointMastery || {}
+      renderScoreChart(scoreDom, data.scoreTrend || [])
+      renderKnowledgeChart(knowledgeDom, mastery)
+      renderLevelChart(levelDom, mastery, data.scoreTrend || [])
+    }, 80)
+  })
+}
+
+function renderScoreChart(dom, trend) {
+  scoreChart = getChart(dom, scoreChart)
+  if (!scoreChart) return
+
+  var xData = trend.map(function(item, index) {
+    if (item.date) return item.date.slice(5, 10)
+    return '第' + (index + 1) + '次'
+  })
+  var yData = trend.map(function(item) {
+    return getScoreValue(item.score)
+  })
+
+  if (xData.length === 0) {
+    xData = ['暂无数据']
+    yData = [0]
   }
 
-  var knowledgeDom = document.getElementById('knowledgeChart')
-  if (knowledgeDom) {
-    if (knowledgeChart) knowledgeChart.dispose()
-    knowledgeChart = echarts.init(knowledgeDom)
+  scoreChart.setOption({
+    grid: { left: 36, right: 20, top: 30, bottom: 35 },
+    tooltip: { trigger: 'axis' },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: xData,
+      axisLabel: { color: '#606266' }
+    },
+    yAxis: {
+      type: 'value',
+      min: 0,
+      max: 100,
+      axisLabel: { color: '#606266' },
+      splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.22)' } }
+    },
+    series: [{
+      name: '成绩',
+      type: 'line',
+      data: yData,
+      smooth: true,
+      symbolSize: 8,
+      lineStyle: { color: '#409EFF', width: 3 },
+      itemStyle: { color: '#409EFF' },
+      areaStyle: { color: 'rgba(64, 158, 255, 0.12)' }
+    }]
+  }, true)
+}
 
-    var mastery = analytics.value && analytics.value.knowledgePointMastery ? analytics.value.knowledgePointMastery : {}
-    var keys = Object.keys(mastery).slice(0, 8)
-    var pieData = []
-    for (var j = 0; j < keys.length; j++) {
-      var k = keys[j]
-      pieData.push({
-        name: getKnowledgePointName(k),
-        value: parseFloat(mastery[k].avgScore)
-      })
+function renderKnowledgeChart(dom, mastery) {
+  knowledgeChart = getChart(dom, knowledgeChart)
+  if (!knowledgeChart) return
+
+  var keys = Object.keys(mastery).slice(0, 8)
+  var pieData = keys.map(function(key) {
+    return {
+      name: getKnowledgePointName(key),
+      value: getMasteryValue(mastery[key])
     }
+  }).filter(function(item) {
+    return item.value > 0
+  })
 
-    knowledgeChart.setOption({
-      tooltip: { trigger: 'item' },
-      series: [{
-        name: '知识点掌握情况',
-        type: 'pie',
-        radius: ['40%', '70%'],
-        data: pieData
-      }]
-    })
+  var hasData = pieData.length > 0
+  if (!hasData) {
+    pieData = [{ name: '暂无数据', value: 1, itemStyle: { color: '#dcdfe6' } }]
   }
 
-  var levelDom = document.getElementById('levelChart')
-  if (levelDom) {
-    if (levelChart) levelChart.dispose()
-    levelChart = echarts.init(levelDom)
+  knowledgeChart.setOption({
+    color: ['#409EFF', '#67C23A', '#E6A23C', '#F56C6C', '#909399', '#7C3AED', '#14B8A6', '#F97316'],
+    tooltip: {
+      trigger: 'item',
+      formatter: hasData ? '{b}: {c}%' : '{b}'
+    },
+    legend: {
+      bottom: 0,
+      type: 'scroll',
+      textStyle: { color: '#606266' }
+    },
+    series: [{
+      name: '知识点掌握情况',
+      type: 'pie',
+      radius: ['42%', '68%'],
+      center: ['50%', '44%'],
+      avoidLabelOverlap: true,
+      label: { formatter: hasData ? '{b}\n{c}%' : '{b}' },
+      data: pieData
+    }]
+  }, true)
+}
 
-    var wrongCount = wrongQuestions.value.length
-    var masteryValues = analytics.value && analytics.value.knowledgePointMastery
-      ? Object.values(analytics.value.knowledgePointMastery).map(function(item) { return parseFloat(item.avgScore || 0) })
-      : []
-    var avgMastery = masteryValues.length
-      ? Math.round(masteryValues.reduce(function(sum, val) { return sum + val }, 0) / masteryValues.length)
-      : 0
-    var trendData = analytics.value && analytics.value.scoreTrend ? analytics.value.scoreTrend : []
-    var latestScore = trendData.length ? trendData[trendData.length - 1].score : 0
+function renderLevelChart(dom, mastery, trendData) {
+  levelChart = getChart(dom, levelChart)
+  if (!levelChart) return
 
-    levelChart.setOption({
-      radar: {
-        indicator: [
-          { name: '最新成绩', max: 100 },
-          { name: '知识点掌握', max: 100 },
-          { name: '错题控制', max: 100 }
-        ]
-      },
-      series: [{
-        type: 'radar',
-        data: [{
-          value: [latestScore, avgMastery, Math.max(0, 100 - wrongCount * 10)],
-          areaStyle: { color: 'rgba(103, 194, 58, 0.2)' },
-          lineStyle: { color: '#67C23A' }
-        }]
+  var lastEntry = trendData.length > 0 ? trendData[trendData.length - 1] : null
+  var latestScoreValue = lastEntry ? getScoreValue(lastEntry.score) : 0
+  var masteryAverage = getAverageMastery(mastery)
+  var wrongControl = Math.max(0, 100 - wrongQuestions.value.length * 8)
+
+  levelChart.setOption({
+    tooltip: {},
+    radar: {
+      radius: '62%',
+      indicator: [
+        { name: '最新成绩', max: 100 },
+        { name: '知识点掌握', max: 100 },
+        { name: '错题控制', max: 100 },
+        { name: '稳定性', max: 100 }
+      ],
+      splitArea: { areaStyle: { color: ['rgba(64, 158, 255, 0.03)', 'rgba(64, 158, 255, 0.08)'] } },
+      axisName: { color: '#606266' }
+    },
+    series: [{
+      name: '综合能力',
+      type: 'radar',
+      data: [{
+        value: [latestScoreValue, masteryAverage, wrongControl, calculateStability(trendData)],
+        areaStyle: { color: 'rgba(103, 194, 58, 0.2)' },
+        lineStyle: { color: '#67C23A', width: 3 },
+        itemStyle: { color: '#67C23A' }
       }]
-    })
-  }
+    }]
+  }, true)
+}
+
+function calculateStability(trendData) {
+  if (!trendData || trendData.length < 2) return 80
+  var scores = trendData.map(function(item) {
+    return getScoreValue(item.score)
+  })
+  var average = scores.reduce(function(total, score) {
+    return total + score
+  }, 0) / scores.length
+  var variance = scores.reduce(function(total, score) {
+    return total + Math.pow(score - average, 2)
+  }, 0) / scores.length
+  return Math.max(0, Math.round(100 - Math.sqrt(variance)))
+}
+
+function resizeCharts() {
+  if (scoreChart) scoreChart.resize()
+  if (knowledgeChart) knowledgeChart.resize()
+  if (levelChart) levelChart.resize()
+}
+
+function disposeCharts() {
+  if (scoreChart) scoreChart.dispose()
+  if (knowledgeChart) knowledgeChart.dispose()
+  if (levelChart) levelChart.dispose()
+  scoreChart = null
+  knowledgeChart = null
+  levelChart = null
 }
 
 function goToWrongQuestions() {
@@ -422,7 +569,7 @@ function exportPDF() {
       font-size: 12px;
       color: #666;
     }
-  </style>
+  <\/style>
 </head>
 <body>
   <div class="header">
@@ -494,21 +641,45 @@ function exportPDF() {
 </script>
 
 <style scoped>
+.student-analytics {
+  overflow-x: clip;
+  width: 100%;
+  max-width: calc(100vw - var(--sidebar-width) - 48px);
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.analytics-card,
+.wrong-section-card,
+.chart-card {
+  margin-top: 20px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
 .student-list-header,
 .analytics-toolbar,
-.toolbar-left {
+.toolbar-left,
+.header-left {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .student-list-header,
 .analytics-toolbar {
   justify-content: space-between;
+  width: 100%;
 }
 
+.header-left,
 .toolbar-left {
-  flex-wrap: wrap;
+  flex: 1 1 260px;
 }
 
 .toolbar-title {
@@ -520,9 +691,102 @@ function exportPDF() {
   margin-left: auto;
 }
 
-.analytics-card,
-.chart-row,
-.wrong-section-card {
+.chart-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
   margin-top: 20px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.chart-col {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chart-container {
+  width: 100%;
+  height: 300px;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.question-content,
+.answer-text {
+  display: inline-block;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+:deep(.el-card),
+:deep(.el-card__body),
+:deep(.el-card__header),
+:deep(.el-table),
+:deep(.el-table__inner-wrapper),
+:deep(.el-scrollbar),
+:deep(.el-scrollbar__wrap),
+:deep(.el-descriptions),
+:deep(.el-descriptions__body) {
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+:deep(.el-table) {
+  width: 100% !important;
+  max-width: 100% !important;
+  table-layout: fixed;
+}
+
+:deep(.el-table__header-wrapper),
+:deep(.el-table__body-wrapper),
+:deep(.el-table__footer-wrapper) {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+}
+
+:deep(.el-table__header),
+:deep(.el-table__body),
+:deep(.el-table__footer) {
+  width: 100% !important;
+  max-width: 100% !important;
+  table-layout: fixed !important;
+}
+
+:deep(.el-table__cell),
+:deep(.el-table .cell),
+:deep(.el-descriptions__cell) {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+:deep(.el-table__body-wrapper) {
+  overflow-x: hidden;
+}
+
+@media (max-width: 768px) {
+  .student-list-header,
+  .analytics-toolbar {
+    align-items: stretch;
+  }
+
+  .toolbar-export {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .chart-row {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

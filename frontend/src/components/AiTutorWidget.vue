@@ -69,6 +69,20 @@
           </el-tag>
         </div>
 
+        <!-- 配置检测 -->
+        <div :class="['config-status', configStatusClass]">
+          <div class="config-status-main">
+            <span class="config-status-dot"></span>
+            <span class="config-status-text">{{ configStatusText }}</span>
+          </div>
+          <button class="config-check-btn" type="button" :disabled="checkingConfig" @click="checkAiTutorConfig">
+            {{ checkingConfig ? '检测中' : '重新检测' }}
+          </button>
+        </div>
+        <div v-if="configStatus && !configStatus.ready" class="config-status-detail">
+          {{ configStatus.message }}
+        </div>
+
         <!-- 消息列表 -->
         <div ref="messageListRef" class="message-list">
           <div
@@ -153,6 +167,8 @@ import api from '@/utils/api'
 
 var panelVisible = ref(false)
 var loading = ref(false)
+var checkingConfig = ref(false)
+var configStatus = ref(null)
 var activeMode = ref('chat')
 var inputValue = ref('')
 var validationMessage = ref('')
@@ -198,7 +214,22 @@ function switchMode(mode) {
 }
 
 var canSend = computed(function () {
-  return !loading.value && !validateLocally(inputValue.value, activeMode.value)
+  return !loading.value && (!configStatus.value || configStatus.value.ready) && !validateLocally(inputValue.value, activeMode.value)
+})
+
+var configStatusClass = computed(function () {
+  if (checkingConfig.value) return 'is-checking'
+  if (!configStatus.value) return 'is-unknown'
+  return configStatus.value.ready ? 'is-ready' : 'is-error'
+})
+
+var configStatusText = computed(function () {
+  if (checkingConfig.value) return '正在检测 AI 助教配置...'
+  if (!configStatus.value) return '尚未检测 AI 助教配置'
+  if (configStatus.value.ready) {
+    return 'AI助教配置正常 · ' + (configStatus.value.model || '未知模型')
+  }
+  return 'AI助教配置异常'
 })
 
 function scrollToBottom() {
@@ -207,6 +238,33 @@ function scrollToBottom() {
       messageListRef.value.scrollTop = messageListRef.value.scrollHeight
     }
   })
+}
+
+async function checkAiTutorConfig() {
+  checkingConfig.value = true
+  try {
+    var res = await api.student.getAiTutorStatus()
+    if (res.success && res.data) {
+      configStatus.value = res.data
+      if (!res.data.ready) {
+        errorMessage.value = res.data.message || 'AI助教配置异常'
+      } else if (errorMessage.value && errorMessage.value.indexOf('AI助教配置') > -1) {
+        errorMessage.value = ''
+      }
+      return
+    }
+    throw new Error(res.message || 'AI助教配置检测失败')
+  } catch (error) {
+    configStatus.value = {
+      ready: false,
+      configured: false,
+      enabled: false,
+      message: error && error.message ? error.message : 'AI助教配置检测失败，请确认后端服务是否正常运行'
+    }
+    errorMessage.value = configStatus.value.message
+  } finally {
+    checkingConfig.value = false
+  }
 }
 
 function handleInput(value) {
@@ -219,6 +277,12 @@ async function sendQuestion() {
   validationMessage.value = validateLocally(question, activeMode.value)
   errorMessage.value = ''
   if (validationMessage.value) return
+
+  if (configStatus.value && !configStatus.value.ready) {
+    errorMessage.value = configStatus.value.message || 'AI助教配置异常，请先完成配置检测'
+    ElMessage.error(errorMessage.value)
+    return
+  }
 
   messages.value.push({ role: 'user', content: question })
   inputValue.value = ''
@@ -244,11 +308,15 @@ async function sendQuestion() {
 }
 
 watch(panelVisible, function (visible) {
-  if (visible) scrollToBottom()
+  if (visible) {
+    scrollToBottom()
+    checkAiTutorConfig()
+  }
 })
 
 onMounted(function () {
   handleInput('')
+  checkAiTutorConfig()
 })
 </script>
 
@@ -508,6 +576,101 @@ onMounted(function () {
 .scope-tag {
   font-weight: 600;
   border: none;
+}
+
+/* === 配置检测 === */
+.config-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 16px 10px;
+  padding: 9px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-muted);
+  flex-shrink: 0;
+}
+
+.config-status-main {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.config-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.config-status-text {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-status.is-ready {
+  background: var(--success-bg);
+  border-color: hsla(var(--success-hue), 90%, 45%, 0.22);
+}
+
+.config-status.is-ready .config-status-dot {
+  background: var(--success-500);
+  box-shadow: 0 0 0 3px hsla(var(--success-hue), 90%, 45%, 0.14);
+}
+
+.config-status.is-ready .config-status-text {
+  color: var(--success-500);
+}
+
+.config-status.is-error {
+  background: var(--danger-bg);
+  border-color: hsla(var(--danger-hue), 84%, 60%, 0.22);
+}
+
+.config-status.is-error .config-status-dot {
+  background: var(--danger-500);
+  box-shadow: 0 0 0 3px hsla(var(--danger-hue), 84%, 60%, 0.14);
+}
+
+.config-status.is-error .config-status-text {
+  color: var(--danger-500);
+}
+
+.config-status.is-checking .config-status-dot {
+  background: var(--warning-500);
+  animation: status-pulse 1.2s ease-in-out infinite;
+}
+
+.config-check-btn {
+  border: none;
+  background: transparent;
+  color: var(--primary-500);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.config-check-btn:disabled {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+.config-status-detail {
+  margin: -4px 16px 10px;
+  padding: 0 2px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--danger-500);
+  flex-shrink: 0;
 }
 
 /* === 消息列表 === */
