@@ -3,9 +3,7 @@
     <!-- 侧边栏 -->
     <aside class="sidebar">
       <div class="logo">
-        <div class="logo-icon">
-          <el-icon :size="20"><Reading /></el-icon>
-        </div>
+        <img class="logo-img" src="/images/logo.png" alt="智析数学 logo">
         <div class="logo-text">
           <span>智析数学</span>
           <span class="logo-subtitle">教师空间</span>
@@ -137,6 +135,31 @@ function handleCommand(command) {
 </script>
 
 <style scoped>
+/* === 页面骨架 === */
+.layout-container {
+  width: 100%;
+  min-height: 100vh;
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+.main-content {
+  min-height: 100vh;
+  width: calc(100vw - var(--sidebar-width));
+  max-width: calc(100vw - var(--sidebar-width));
+  min-width: 0;
+  margin-left: var(--sidebar-width);
+  padding: 24px;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+.main-content > :deep(*) {
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
 /* === 侧边栏 === */
 .sidebar {
   width: var(--sidebar-width);
@@ -164,11 +187,11 @@ function handleCommand(command) {
 
 /* === Logo === */
 .logo {
-  height: 72px;
+  height: 80px;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 20px;
+  padding: 0 18px;
   border-bottom: 1px solid var(--border-subtle);
   position: relative;
 }
@@ -183,21 +206,18 @@ function handleCommand(command) {
   opacity: 0.4;
   border-radius: 1px;
 }
-.logo-icon {
-  width: 38px;
-  height: 38px;
-  background: var(--brand-gradient);
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 18px;
-  box-shadow: var(--brand-glow);
+.logo-img {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: center;
+  background: transparent;
+  box-shadow: none;
   transition: all var(--duration-normal) var(--ease-spring);
   flex-shrink: 0;
 }
-.logo:hover .logo-icon { transform: rotate(10deg) scale(1.08); }
+.logo:hover .logo-img { transform: scale(1.06); }
 .logo-text { font-size: 17px; font-weight: 700; color: var(--text-primary); letter-spacing: 0.02em; }
 .logo-subtitle { font-size: 11px; color: var(--text-muted); font-weight: 400; margin-top: 2px; display: block; }
 

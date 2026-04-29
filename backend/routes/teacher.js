@@ -202,6 +202,120 @@ function buildAccuracyFromQuestionResults(questionResults) {
   return Math.round((correctCount / questionResults.length) * 100);
 }
 
+const demoStudentAnalyticsProfiles = {
+  'student-004': {
+    scoreTrend: [
+      { date: '2024-03-01T08:00:00.000Z', score: 86, assignmentTitle: '第一次测试' },
+      { date: '2024-03-08T08:00:00.000Z', score: 90, assignmentTitle: '阶段练习' },
+      { date: '2024-03-15T08:00:00.000Z', score: 92, assignmentTitle: '第二次测试' },
+      { date: '2024-03-22T08:00:00.000Z', score: 95, assignmentTitle: '综合提升' }
+    ],
+    knowledgePointMastery: {
+      'kp-001': { avgScore: '96.00', count: 4 },
+      'kp-002': { avgScore: '94.00', count: 4 },
+      'kp-003': { avgScore: '90.00', count: 3 },
+      'kp-005': { avgScore: '87.00', count: 3 },
+      'kp-007': { avgScore: '82.00', count: 2 }
+    },
+    wrongQuestions: [
+      {
+        questionId: 'demo-liuyang-001',
+        content: '已知 3x - 2 = 16，求 x 的值。刘洋在移项后忘记合并常数项。',
+        correctAnswer: 'x = 6',
+        studentAnswer: 'x = 5',
+        paperId: 'demo-paper-liuyang',
+        knowledgePoints: ['kp-005']
+      }
+    ]
+  },
+  'student-005': {
+    scoreTrend: [
+      { date: '2024-03-01T08:00:00.000Z', score: 78, assignmentTitle: '第一次测试' },
+      { date: '2024-03-08T08:00:00.000Z', score: 84, assignmentTitle: '阶段练习' },
+      { date: '2024-03-15T08:00:00.000Z', score: 88, assignmentTitle: '第二次测试' },
+      { date: '2024-03-22T08:00:00.000Z', score: 91, assignmentTitle: '综合提升' }
+    ],
+    knowledgePointMastery: {
+      'kp-001': { avgScore: '88.00', count: 4 },
+      'kp-002': { avgScore: '91.00', count: 4 },
+      'kp-003': { avgScore: '76.00', count: 3 },
+      'kp-005': { avgScore: '93.00', count: 3 },
+      'kp-007': { avgScore: '85.00', count: 2 }
+    },
+    wrongQuestions: [
+      {
+        questionId: 'demo-chenjing-001',
+        content: '计算 (-3) × (-4) ÷ 2。陈静乘除混合运算顺序掌握不稳定。',
+        correctAnswer: '6',
+        studentAnswer: '24',
+        paperId: 'demo-paper-chenjing',
+        knowledgePoints: ['kp-003']
+      },
+      {
+        questionId: 'demo-chenjing-002',
+        content: '判断两条直线是否平行，并说明理由。',
+        correctAnswer: '同位角相等，两直线平行',
+        studentAnswer: '看起来不相交所以平行',
+        paperId: 'demo-paper-chenjing',
+        knowledgePoints: ['kp-007']
+      }
+    ]
+  },
+  'student-010': {
+    scoreTrend: [
+      { date: '2024-03-01T08:00:00.000Z', score: 82, assignmentTitle: '第一次测试' },
+      { date: '2024-03-08T08:00:00.000Z', score: 79, assignmentTitle: '阶段练习' },
+      { date: '2024-03-15T08:00:00.000Z', score: 85, assignmentTitle: '第二次测试' },
+      { date: '2024-03-22T08:00:00.000Z', score: 87, assignmentTitle: '综合提升' }
+    ],
+    knowledgePointMastery: {
+      'kp-001': { avgScore: '84.00', count: 4 },
+      'kp-002': { avgScore: '72.00', count: 4 },
+      'kp-003': { avgScore: '88.00', count: 3 },
+      'kp-005': { avgScore: '80.00', count: 3 },
+      'kp-007': { avgScore: '94.00', count: 2 }
+    },
+    wrongQuestions: [
+      {
+        questionId: 'demo-zhenghua-001',
+        content: '计算 -7 + 12 - 8。郑华对有理数加减混合符号处理较薄弱。',
+        correctAnswer: '-3',
+        studentAnswer: '13',
+        paperId: 'demo-paper-zhenghua',
+        knowledgePoints: ['kp-002']
+      },
+      {
+        questionId: 'demo-zhenghua-002',
+        content: '解方程 4x + 6 = 2x + 18。',
+        correctAnswer: 'x = 6',
+        studentAnswer: 'x = 12',
+        paperId: 'demo-paper-zhenghua',
+        knowledgePoints: ['kp-005']
+      },
+      {
+        questionId: 'demo-zhenghua-003',
+        content: '判断 0.333... 是否为有理数并说明原因。',
+        correctAnswer: '是，可以写成 1/3',
+        studentAnswer: '不是，因为小数位很多',
+        paperId: 'demo-paper-zhenghua',
+        knowledgePoints: ['kp-001']
+      }
+    ]
+  }
+};
+
+function applyDemoStudentAnalyticsProfile(student, analytics) {
+  const profile = demoStudentAnalyticsProfiles[student.id];
+  if (!profile) return analytics;
+
+  return {
+    ...analytics,
+    scoreTrend: profile.scoreTrend,
+    knowledgePointMastery: profile.knowledgePointMastery,
+    wrongQuestions: profile.wrongQuestions
+  };
+}
+
 // 配置文件上传
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -1192,14 +1306,16 @@ router.get('/analytics/student/:studentId', (req, res) => {
       }
     });
 
+    const analyticsData = applyDemoStudentAnalyticsProfile(student, {
+      student,
+      scoreTrend,
+      knowledgePointMastery,
+      wrongQuestions
+    });
+
     res.json({
       success: true,
-      data: {
-        student,
-        scoreTrend,
-        knowledgePointMastery,
-        wrongQuestions
-      }
+      data: analyticsData
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

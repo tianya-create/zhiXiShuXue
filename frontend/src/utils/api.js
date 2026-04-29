@@ -23,6 +23,10 @@ api.interceptors.response.use(function (response) {
   return response.data
 }, async function (error) {
   var config = error.config || {}
+  var url = config.url || ''
+  if (typeof url === 'string' && (url.includes('/api/log') || url.includes('daxuesoutijiang.com'))) {
+    return Promise.reject(error)
+  }
   config.__retryCount = config.__retryCount || 0
   if ((error.code === 'ECONNABORTED' || !error.response) && config.__retryCount < 1) {
     config.__retryCount += 1
@@ -54,6 +58,7 @@ request.student = {
   getPracticeQuestions: function (kpId) { return request.get('/student/practice/' + kpId) },
   submitPractice: function (kpId, data) { return request.post('/student/practice/' + kpId + '/submit', data) },
   getQuestionsByKp: function (kpId) { return request.get('/student/questions', { knowledgePointId: kpId }) },
+  getAiTutorStatus: function () { return request.get('/student/ai-tutor/status') },
   askAiTutor: function (data) { return request.post('/student/ai-tutor/chat', data) }
 }
 

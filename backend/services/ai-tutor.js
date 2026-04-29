@@ -126,6 +126,32 @@ function getAdminSettingsView() {
   };
 }
 
+function getTutorConfigStatus() {
+  const config = getTutorConfig();
+  const missing = [];
+  if (!config.endpoint) missing.push('API Endpoint');
+  if (!config.model) missing.push('Model');
+  if (!config.apiKey) missing.push('API Key');
+
+  const configured = missing.length === 0;
+  return {
+    enabled: config.enabled,
+    configured,
+    ready: config.enabled && configured,
+    provider: config.provider,
+    endpoint: config.endpoint,
+    model: config.model,
+    apiKeyMasked: maskSecret(config.apiKey),
+    managedByEnv: config.managedByEnv,
+    missing,
+    message: !config.enabled
+      ? 'AI助教功能暂未开启'
+      : configured
+        ? 'AI助教配置完整，可正常发起对话'
+        : 'AI助教配置不完整：缺少 ' + missing.join('、')
+  };
+}
+
 function isJuniorMathRelated(text) {
   const normalized = String(text || '').trim();
   if (!normalized) return false;
@@ -285,6 +311,7 @@ async function askAiTutor(messages, question, mode) {
 module.exports = {
   buildAdminSettingsPayload,
   getAdminSettingsView,
+  getTutorConfigStatus,
   getTutorConfig,
   validateQuestion,
   isJuniorMathRelated,
