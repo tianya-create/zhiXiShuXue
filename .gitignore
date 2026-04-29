@@ -88,3 +88,5 @@ logs/
 *.pptx
 *.xlsx
 *.csv
+
+backend/database/questions.sqlite
