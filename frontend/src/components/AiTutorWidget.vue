@@ -96,7 +96,7 @@
             <div class="message-bubble">
               <div class="message-text">{{ item.content }}</div>
             </div>
-            <div v-if="item.role === 'user'" class="message-avatar user-avatar">
+            <div v-if="item.role === 'user'" class="message-avatar ai-user-avatar">
               <el-icon><UserFilled /></el-icon>
             </div>
           </div>
@@ -713,7 +713,7 @@ onMounted(function () {
   box-shadow: var(--brand-glow);
 }
 
-.user-avatar {
+.ai-user-avatar {
   background: var(--surface-muted);
   color: var(--text-secondary);
   border: 1px solid var(--border-subtle);

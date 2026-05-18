@@ -737,6 +737,8 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 32px;
+  position: relative;
+  z-index: 1;
 }
 
 .header-text h2 {
@@ -760,6 +762,8 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-lg);
   text-align: center;
   min-width: 160px;
+  position: relative;
+  z-index: 2;
 }
 
 .focus-badge {

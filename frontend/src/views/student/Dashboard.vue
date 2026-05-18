@@ -59,7 +59,7 @@
               <div class="section-title">今日待办作业</div>
               <div class="section-desc">保留最重要的主流程入口，优先完成近期任务。</div>
             </div>
-            <el-button type="primary" link @click="goToAssignments">查看全部</el-button>
+            <el-button type="primary" link class="view-all-link" @click="goToAssignments">查看全部</el-button>
           </div>
         </template>
         <div v-if="pendingAssignments.length" class="assignment-list">
@@ -131,7 +131,7 @@
             </button>
 
             <button class="quick-action" type="button" @click="goToWeakPoints">
-              <div class="quick-action-icon" style="background: var(--danger-bg); color: var(--danger-color);">
+              <div class="quick-action-icon">
                 <el-icon><TrendCharts /></el-icon>
               </div>
               <div class="quick-action-text">
@@ -142,7 +142,7 @@
             </button>
 
             <button class="quick-action" type="button" @click="goToWrongQuestions">
-              <div class="quick-action-icon" style="background: var(--warning-bg); color: var(--warning-color);">
+              <div class="quick-action-icon">
                 <el-icon><Edit /></el-icon>
               </div>
               <div class="quick-action-text">
@@ -474,10 +474,15 @@ onBeforeUnmount(() => { window.removeEventListener('resize', renderChart); if (c
 
 .stat-card.is-gradient .stat-value,
 .stat-card.is-gradient .stat-label {
-  color: white;
+  color: var(--text-primary);
 }
 
-.stat-card.is-gradient::before { opacity: 1; }
+.stat-card.is-gradient .stat-label {
+  color: var(--text-secondary);
+}
+
+.stat-card.is-gradient::before { opacity: 0; }
+.stat-card.is-gradient:hover::before { opacity: 1; }
 
 /* === 主内容布局 === */
 .dashboard-layout {
@@ -530,6 +535,12 @@ onBeforeUnmount(() => { window.removeEventListener('resize', renderChart); if (c
   font-size: 13px;
   line-height: 1.6;
   font-weight: 500;
+}
+
+.section-header :deep(.view-all-link.el-button--primary.is-link),
+.section-header :deep(.view-all-link.el-button--primary.is-link:hover),
+.section-header :deep(.view-all-link.el-button--primary.is-link:focus) {
+  color: #fff !important;
 }
 
 /* === 作业列表 === */
@@ -717,6 +728,21 @@ onBeforeUnmount(() => { window.removeEventListener('resize', renderChart); if (c
   color: var(--primary-500);
   flex-shrink: 0;
   transition: all var(--duration-normal) var(--ease-spring);
+}
+
+.quick-action:nth-child(1) .quick-action-icon {
+  background: linear-gradient(135deg, rgba(45, 142, 232, 0.1), rgba(52, 199, 193, 0.14));
+  color: #2488dd;
+}
+
+.quick-action:nth-child(2) .quick-action-icon {
+  background: linear-gradient(135deg, rgba(52, 199, 193, 0.14), rgba(143, 222, 220, 0.2));
+  color: #169ca3;
+}
+
+.quick-action:nth-child(3) .quick-action-icon {
+  background: linear-gradient(135deg, rgba(111, 203, 229, 0.14), rgba(229, 250, 255, 0.92));
+  color: #2f8fb8;
 }
 
 .quick-action:hover .quick-action-icon {

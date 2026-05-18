@@ -366,4 +366,107 @@ function handleCommand(command) {
   border: 1px solid var(--border-subtle);
   background: var(--surface-raised);
 }
+
+/* Fresh education UI shell */
+.layout-container {
+  background:
+    radial-gradient(circle at 88% 2%, rgba(83, 220, 216, 0.22), transparent 28%),
+    linear-gradient(135deg, #eef9ff 0%, #dcf6fb 50%, #f8fcff 100%);
+}
+
+.sidebar {
+  top: 18px;
+  left: 18px;
+  bottom: 18px;
+  width: 236px;
+  border: 1px solid rgba(126, 205, 225, 0.22);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 24px 58px rgba(42, 145, 185, 0.14);
+  backdrop-filter: blur(20px);
+  overflow: hidden;
+}
+
+.sidebar::before {
+  display: none;
+}
+
+.logo {
+  height: 96px;
+  padding: 0 18px;
+  border-bottom-color: rgba(126, 205, 225, 0.2);
+}
+
+.logo::after {
+  display: none;
+}
+
+.logo-img {
+  width: 50px;
+  height: 50px;
+  box-shadow: 0 12px 26px rgba(42, 145, 185, 0.12);
+}
+
+.logo-text {
+  color: #101a24;
+  font-weight: 900;
+}
+
+.logo-subtitle {
+  color: #6f91a4;
+  font-weight: 700;
+}
+
+.sidebar-menu {
+  padding: 14px 10px;
+}
+
+:deep(.el-menu-item),
+:deep(.el-sub-menu__title) {
+  height: 46px;
+  margin: 6px 8px;
+  border-radius: 16px;
+  color: #456173;
+  font-weight: 800;
+}
+
+:deep(.el-menu-item:hover),
+:deep(.el-sub-menu__title:hover) {
+  background: rgba(233, 249, 255, 0.92) !important;
+  border-color: rgba(104, 193, 219, 0.32);
+}
+
+:deep(.el-menu-item.is-active) {
+  color: #207fd7 !important;
+  background: linear-gradient(90deg, rgba(45, 142, 232, 0.14), rgba(52, 199, 193, 0.18)) !important;
+  box-shadow: 0 12px 24px rgba(42, 145, 185, 0.11);
+}
+
+:deep(.el-menu-item.is-active .el-icon) {
+  color: #2fbfc0;
+}
+
+.user-info {
+  padding: 14px;
+  background: transparent;
+  border-top-color: rgba(126, 205, 225, 0.2);
+}
+
+.user-avatar {
+  border-radius: 18px;
+  background: rgba(238, 250, 255, 0.8);
+}
+
+.user-avatar .avatar {
+  background: linear-gradient(135deg, #2d8ee8, #34c7c1);
+  box-shadow: 0 10px 22px rgba(47, 179, 213, 0.18);
+}
+
+.main-content {
+  width: calc(100vw - 272px);
+  max-width: calc(100vw - 272px);
+  margin-left: 272px;
+  padding: 28px 30px 32px;
+  background: transparent;
+}
 </style>
