@@ -24,8 +24,8 @@
         table-layout="fixed"
         v-loading="loading"
       >
-        <el-table-column prop="title" label="作业名称" min-width="220" show-overflow-tooltip />
-        <el-table-column prop="paperTitle" label="试卷" width="150" />
+        <el-table-column prop="title" label="作业名称" width="260" show-overflow-tooltip />
+        <el-table-column prop="paperTitle" label="试卷" min-width="220" show-overflow-tooltip />
         <el-table-column prop="questionCount" label="题目数" width="80" />
         <el-table-column prop="deadline" label="截止时间" width="180">
           <template #default="scope">

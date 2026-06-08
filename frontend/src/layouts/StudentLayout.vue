@@ -315,6 +315,10 @@ function handleCommand(command) {
 
 /* Fresh education UI shell */
 .layout-container {
+  width: 100%;
+  min-height: 100vh;
+  max-width: 100vw;
+  overflow-x: hidden;
   background:
     radial-gradient(circle at 88% 2%, rgba(83, 220, 216, 0.22), transparent 28%),
     linear-gradient(135deg, #eef9ff 0%, #dcf6fb 50%, #f8fcff 100%);
@@ -407,8 +411,19 @@ function handleCommand(command) {
 }
 
 .main-content {
+  width: calc(100vw - 272px);
+  max-width: calc(100vw - 272px);
+  min-width: 0;
   margin-left: 272px;
   padding: 28px 30px 32px;
   background: transparent;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+.main-content > :deep(*) {
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 </style>
