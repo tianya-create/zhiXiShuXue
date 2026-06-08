@@ -17,8 +17,14 @@
         </div>
       </template>
       
-      <el-table :data="assignments" style="width: 100%" v-loading="loading">
-        <el-table-column prop="title" label="作业名称" />
+      <el-table
+        class="assignment-table"
+        :data="assignments"
+        style="width: 100%"
+        table-layout="fixed"
+        v-loading="loading"
+      >
+        <el-table-column prop="title" label="作业名称" min-width="220" show-overflow-tooltip />
         <el-table-column prop="paperTitle" label="试卷" width="150" />
         <el-table-column prop="questionCount" label="题目数" width="80" />
         <el-table-column prop="deadline" label="截止时间" width="180">
@@ -42,6 +48,7 @@
           <template #default="scope">
             <el-button
               type="primary"
+              link
               size="small"
               @click="scope.row.submitted ? viewResult(scope.row) : startAssignment(scope.row)"
             >
@@ -99,9 +106,42 @@ function formatDate(date) {
 </script>
 
 <style scoped>
+.student-assignments {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: clip;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.student-assignments :deep(.el-card),
+.student-assignments :deep(.el-card__body),
+.student-assignments :deep(.assignment-table),
+.student-assignments :deep(.el-table__inner-wrapper),
+.student-assignments :deep(.el-table__header-wrapper),
+.student-assignments :deep(.el-table__body-wrapper) {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.student-assignments :deep(.assignment-table .el-table__header),
+.student-assignments :deep(.assignment-table .el-table__body) {
+  width: 100% !important;
+  table-layout: fixed !important;
+}
+
+.student-assignments :deep(.assignment-table .cell) {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

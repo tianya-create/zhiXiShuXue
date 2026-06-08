@@ -171,10 +171,53 @@ function submitForm() {
 }
 
 .tree-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
   visibility: hidden;
 }
 
 .tree-node:hover .tree-actions {
   visibility: visible;
+}
+
+.tree-actions :deep(.el-button.is-link) {
+  flex: 0 0 auto;
+  min-height: 26px;
+  padding: 3px 8px !important;
+  border: 1px solid rgba(36, 136, 221, 0.24) !important;
+  border-radius: 999px !important;
+  background: rgba(247, 253, 255, 0.96) !important;
+  color: #0b5fa8 !important;
+  font-size: 14px !important;
+  font-weight: 900 !important;
+  line-height: 1.2;
+  box-shadow: 0 6px 14px rgba(42, 145, 185, 0.08) !important;
+}
+
+.tree-actions :deep(.el-button + .el-button) {
+  margin-left: 0 !important;
+}
+
+.tree-actions :deep(.el-button.is-link:hover),
+.tree-actions :deep(.el-button.is-link:focus-visible) {
+  border-color: transparent !important;
+  background: #0b5fa8 !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 20px rgba(11, 95, 168, 0.2) !important;
+}
+
+.tree-actions :deep(.el-button.is-link.el-button--danger) {
+  border-color: rgba(180, 35, 24, 0.22) !important;
+  background: rgba(255, 247, 247, 0.98) !important;
+  color: #b42318 !important;
+}
+
+.tree-actions :deep(.el-button.is-link.el-button--danger:hover),
+.tree-actions :deep(.el-button.is-link.el-button--danger:focus-visible) {
+  background: #b42318 !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 20px rgba(180, 35, 24, 0.18) !important;
 }
 </style>
