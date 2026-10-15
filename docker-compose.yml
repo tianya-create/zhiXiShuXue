@@ -1,11 +1,46 @@
-version: '3.9'
 services:
-  app:
-    build: .
-    ports:
-      - '5001:5001'
-      - '5000:5000'
-    volumes:
-      - ./backend/database:/app/backend/database
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend
+    image: zhixi-backend:latest
+    container_name: zhixi-backend
+    restart: unless-stopped
+    env_file:
+      - .env
     environment:
+      - NODE_ENV=production
       - API_PORT=5001
+      - TZ=Asia/Shanghai
+    volumes:
+      # SQLite 数据库持久化
+      - ./backend/database:/app/database
+      # 用户上传文件持久化
+      - ./backend/uploads:/app/uploads
+    networks:
+      - zhixi-net
+    # 仅容器内网暴露，不对宿主机开放，由 web 反向代理访问
+    expose:
+      - "5001"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    image: zhixi-web:latest
+    container_name: zhixi-web
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      - TZ=Asia/Shanghai
+    ports:
+      - "80:80"
+    networks:
+      - zhixi-net
+
+networks:
+  zhixi-net:
+    driver: bridge
