@@ -24,6 +24,9 @@ RUN npm install --omit=dev --no-audit --no-fund
 
 COPY backend/ ./
 
+# 后端 services/knowledge-graph.js 通过 ../../shared 引用共享数据，复制到镜像根
+COPY shared/ /shared/
+
 # 数据持久化目录（SQLite 库 + 用户上传文件）
 RUN mkdir -p /app/database /app/uploads
 

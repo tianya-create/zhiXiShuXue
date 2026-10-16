@@ -26,9 +26,23 @@ app.use(function (req, res, next) {
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// 统一鉴权：校验 JWT 并把令牌身份写入 x-user-id（封堵伪造身份）
+app.use('/api', authMiddleware);
+
 require('./database/migrate-questions-to-sqlite');
 initializeSmartLearningModels();
 seedDemoData();
+
+// 启动数据（默认账号/演示数据）落盘，避免首次启动后重启丢失
+try {
+  const db = require('./database/memory-db');
+  db.flushAll();
+  console.log('[persist] 启动数据已落盘');
+} catch (e) {
+  console.error('[persist] 启动落盘失败:', e.message);
+}
+
+const { authMiddleware } = require('./middleware');
 
 const authRoutes = require('./routes/auth');
 const teacherRoutes = require('./routes/teacher');

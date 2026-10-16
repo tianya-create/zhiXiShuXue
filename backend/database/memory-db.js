@@ -5,7 +5,37 @@
 
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const { loadQuestionsFromStore, getAllQuestions, upsertQuestion, deleteQuestion: deleteQuestionFromStore } = require('./question-store');
+const store = require('./persistent-store');
+
+/**
+ * 首次初始化时的默认账号密码
+ * 不再硬编码明文（源码公开，硬编码等于公开密码）：
+ * - 可用环境变量指定：INIT_ADMIN_PASSWORD / INIT_TEACHER_PASSWORD / INIT_STUDENT_PASSWORD
+ * - 未指定则随机生成，仅在首次启动日志中打印一次
+ */
+const generatedCredentials = [];
+
+function generatePassword(length = 12) {
+  const alphabet = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = crypto.randomBytes(length);
+  let out = '';
+  for (let i = 0; i < length; i += 1) {
+    out += alphabet[bytes[i] % alphabet.length];
+  }
+  return out;
+}
+
+function resolveInitialPassword(envKey, label) {
+  const fromEnv = process.env[envKey];
+  if (fromEnv && String(fromEnv).trim()) {
+    return String(fromEnv).trim();
+  }
+  const plain = generatePassword(12);
+  generatedCredentials.push({ label, plain });
+  return plain;
+}
 
 // 内存存储
 const db = {
@@ -35,7 +65,7 @@ const db = {
 // 初始化默认数据
 function initializeData() {
   // 创建默认管理员
-  const adminPassword = bcrypt.hashSync('admin123', 10);
+  const adminPassword = bcrypt.hashSync(resolveInitialPassword('INIT_ADMIN_PASSWORD', '管理员'), 10);
   db.users.push({
     id: 'admin-001',
     username: 'admin',
@@ -49,7 +79,7 @@ function initializeData() {
   });
 
   // 创建默认教师
-  const teacherPassword = bcrypt.hashSync('teacher123', 10);
+  const teacherPassword = bcrypt.hashSync(resolveInitialPassword('INIT_TEACHER_PASSWORD', '教师'), 10);
   const teacherId = 'teacher-001';
   db.users.push({
     id: teacherId,
@@ -86,7 +116,7 @@ function initializeData() {
   ];
 
   students.forEach((student, index) => {
-    const password = bcrypt.hashSync('student123', 10);
+    const password = bcrypt.hashSync(resolveInitialPassword('INIT_STUDENT_PASSWORD', '学生'), 10);
     db.users.push({
       id: student.id,
       username: student.username,
@@ -645,10 +675,26 @@ function initializeData() {
   db.answers.push(answerSubjective2);
 
   console.log('数据库初始化完成');
-  console.log('默认账号信息:');
-  console.log('管理员 - 用户名: admin, 密码: admin123');
-  console.log('教师 - 用户名: teacher, 密码: teacher123');
-  console.log('学生 - 用户名: student, 密码: student123');
+  console.log('默认账号用户名: admin / teacher / student');
+
+  const envMap = {
+    管理员: 'INIT_ADMIN_PASSWORD',
+    教师: 'INIT_TEACHER_PASSWORD',
+    学生: 'INIT_STUDENT_PASSWORD'
+  };
+  const seen = new Set();
+  generatedCredentials.forEach(({ label, plain }) => {
+    if (!seen.has(label)) {
+      seen.add(label);
+      console.log(`[首次密码] ${label}: ${plain}  （请立即登录后修改，此密码仅在首次初始化时生成一次）`);
+    }
+  });
+  ['管理员', '教师', '学生'].forEach((label) => {
+    if (!seen.has(label) && process.env[envMap[label]]) {
+      console.log(`[首次密码] ${label}: 由环境变量 ${envMap[label]} 指定`);
+    }
+  });
+  console.log('提示：可通过环境变量 INIT_ADMIN_PASSWORD / INIT_TEACHER_PASSWORD / INIT_STUDENT_PASSWORD 预先指定初始密码');
 }
 
 // 数据库操作类
@@ -662,19 +708,60 @@ class Database {
     return this.data.questions;
   }
 
+  /**
+   * 持久化单个变更
+   * - questions 由 question-store 独立管理
+   * - 其余集合写入 persistent-store（SQLite）
+   */
   persistCollection(collection, payload) {
-    if (collection !== 'questions') {
+    if (collection === 'questions') {
+      if (payload && payload.type === 'delete') {
+        deleteQuestionFromStore(payload.id);
+        return;
+      }
+      if (payload && payload.item) {
+        upsertQuestion(payload.item);
+      }
       return;
     }
 
-    if (payload && payload.type === 'delete') {
-      deleteQuestionFromStore(payload.id);
-      return;
+    try {
+      if (payload && payload.type === 'delete') {
+        store.removeItem(collection, payload.id);
+        return;
+      }
+      if (payload && payload.item !== undefined) {
+        const item = payload.item;
+        const id = (item && item.id) !== undefined ? item.id : store.OBJECT_ROW_ID;
+        if (item && typeof item === 'object' && !Array.isArray(item)) {
+          store.upsertItem(collection, id, item);
+        }
+      }
+    } catch (e) {
+      console.error(`[persist] 写入失败 ${collection}:`, e.message);
     }
+  }
 
-    if (payload && payload.item) {
-      upsertQuestion(payload.item);
-    }
+  /** 全量落盘：把内存里所有集合写入 SQLite（兜底直连内存的写入路径） */
+  flushAll() {
+    const collections = Object.keys(this.data);
+    collections.forEach((collection) => {
+      if (collection === 'questions') return;
+      const value = this.data[collection];
+      try {
+        if (Array.isArray(value)) {
+          // 日志类集合只保留最近 5000 条，避免无限增长
+          const trimmed = collection === 'logs' && value.length > 5000 ? value.slice(-5000) : value;
+          if (collection === 'logs' && trimmed !== value) this.data[collection] = trimmed;
+          store.replaceCollection(collection, trimmed);
+        } else if (value && typeof value === 'object') {
+          store.saveObject(collection, value);
+        }
+      } catch (e) {
+        console.error(`[persist] 集合落盘失败 ${collection}:`, e.message);
+      }
+    });
+    return collections.length;
   }
 
   // 通用 CRUD 操作
@@ -731,11 +818,20 @@ class Database {
 
   delete(collection, query = {}) {
     const initialLength = this.data[collection].length;
+    const removedItems = this.data[collection].filter(item => {
+      return Object.keys(query).every(key => item[key] === query[key]);
+    });
     this.data[collection] = this.data[collection].filter(item => {
       return !Object.keys(query).every(key => item[key] === query[key]);
     });
-    if (initialLength != this.data[collection].length && collection === 'questions') {
-      this.data[collection].forEach(item => this.persistCollection(collection, { item }));
+    if (initialLength != this.data[collection].length) {
+      removedItems.forEach((item) => {
+        if (collection === 'questions') {
+          this.persistCollection(collection, { item });
+        } else if (item && item.id !== undefined) {
+          this.persistCollection(collection, { type: 'delete', id: item.id });
+        }
+      });
     }
     return initialLength - this.data[collection].length;
   }
@@ -868,8 +964,84 @@ Database.prototype.resolveStudentMistake = function(studentId, questionId) {
   });
 };
 
-initializeData();
+// ---------- 启动：优先加载持久化数据，首次启动才写入默认数据 ----------
+function bootstrapData() {
+  let restored = false;
+  try {
+    const persisted = store.loadAll();
+    const collections = Object.keys(persisted);
+    if (collections.length) {
+      collections.forEach((collection) => {
+        const value = persisted[collection];
+        if (Array.isArray(value)) {
+          db[collection] = value;
+        } else if (value && typeof value === 'object') {
+          db[collection] = value;
+        }
+      });
+      restored = collections.length > 0;
+    }
+  } catch (e) {
+    console.error('[persist] 读取持久化数据失败，将使用内存模式:', e.message);
+  }
+
+  if (!restored) {
+    console.log('[persist] 未发现历史数据，按默认数据初始化并落盘');
+    initializeData();
+    try {
+      store.replaceCollection('users', db.users);
+    } catch (e) {
+      console.error('[persist] 初始化落盘失败:', e.message);
+    }
+  } else {
+    console.log(`[persist] 已从 SQLite 恢复数据：${Object.keys(db).filter(k => Array.isArray(db[k]) && db[k].length).map(k => k + '(' + db[k].length + ')').join(', ')}`);
+  }
+}
+
+bootstrapData();
 
 // 导出数据库实例
 const database = new Database();
+
+// 题库从独立存储载入（questions.sqlite）
+try {
+  database.reloadQuestionsFromStore();
+} catch (e) {
+  console.error('[persist] 题库加载失败:', e.message);
+}
+
+// 兜底落盘：这些集合在业务代码里被直接改内存（绕过 CRUD），需要定时同步
+const VOLATILE_COLLECTIONS = ['settings', 'knowledgeGraphNodes', 'knowledgeGraphWrong', 'knowledgeGraphRecommend'];
+const FLUSH_INTERVAL_MS = 5000;
+const flushTimer = setInterval(() => {
+  VOLATILE_COLLECTIONS.forEach((collection) => {
+    const value = database.data[collection];
+    if (value === undefined) return;
+    try {
+      if (Array.isArray(value)) {
+        store.replaceCollection(collection, value);
+      } else if (value && typeof value === 'object') {
+        store.saveObject(collection, value);
+      }
+    } catch (e) {
+      console.error(`[persist] 定时落盘失败 ${collection}:`, e.message);
+    }
+  });
+}, FLUSH_INTERVAL_MS);
+if (flushTimer.unref) flushTimer.unref();
+
+// 退出前全量落盘，兜住所有写入路径（docker stop 会发 SIGTERM）
+function flushAndExit() {
+  try {
+    database.flushAll();
+    console.log('[persist] 退出前已全量落盘');
+  } catch (e) {
+    console.error('[persist] 退出落盘失败:', e.message);
+  }
+  process.exit(0);
+}
+['SIGTERM', 'SIGINT', 'SIGHUP'].forEach((signal) => {
+  process.on(signal, flushAndExit);
+});
+
 module.exports = database;

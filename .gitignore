@@ -90,3 +90,14 @@ logs/
 *.csv
 
 backend/database/questions.sqlite
+
+# 应用数据（运行时生成，含用户/作业/成绩等，切勿提交）
+backend/database/app.sqlite
+backend/database/app.sqlite-journal
+backend/database/app.sqlite-wal
+backend/database/app.sqlite-shm
+backend/database/*.sqlite.tmp
+
+# 用户上传文件
+backend/uploads/*
+!backend/uploads/.gitkeep

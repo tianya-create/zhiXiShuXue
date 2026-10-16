@@ -3,8 +3,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const db = require('../database/memory-db');
-
-const JWT_SECRET = 'your-secret-key-education-platform-2024';
+const { JWT_SECRET, JWT_EXPIRES_IN } = require('../config/auth-secret');
 
 // 用户登录
 router.post('/login', (req, res) => {
@@ -42,7 +41,7 @@ router.post('/login', (req, res) => {
     const token = jwt.sign(
       { userId: user.id, role: user.role },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: JWT_EXPIRES_IN }
     );
     
     // 记录日志
@@ -100,8 +99,10 @@ router.post('/logout', (req, res) => {
 // 修改密码
 router.post('/change-password', (req, res) => {
   try {
-    const { userId, oldPassword, newPassword } = req.body;
-    
+    const { oldPassword, newPassword } = req.body;
+    // 只允许修改自己的密码：以令牌身份为准，忽略请求体中的 userId
+    const userId = (req.user && req.user.id) || req.headers['x-user-id'];
+
     if (!userId || !oldPassword || !newPassword) {
       return res.status(400).json({
         success: false,
