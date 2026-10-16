@@ -26,9 +26,6 @@ app.use(function (req, res, next) {
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// 统一鉴权：校验 JWT 并把令牌身份写入 x-user-id（封堵伪造身份）
-app.use('/api', authMiddleware);
-
 require('./database/migrate-questions-to-sqlite');
 initializeSmartLearningModels();
 seedDemoData();
@@ -43,6 +40,9 @@ try {
 }
 
 const { authMiddleware } = require('./middleware');
+
+// 统一鉴权：校验 JWT 并把令牌身份写入 x-user-id（封堵伪造身份）
+app.use('/api', authMiddleware);
 
 const authRoutes = require('./routes/auth');
 const teacherRoutes = require('./routes/teacher');

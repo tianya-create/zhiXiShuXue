@@ -38,10 +38,11 @@
             {{ formatDate(scope.row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200">
+        <el-table-column label="操作" width="290">
           <template #default="scope">
             <el-button type="primary" link @click="viewAnalytics(scope.row)">学情分析</el-button>
             <el-button type="primary" link @click="editStudent(scope.row)">编辑</el-button>
+            <el-button type="warning" link @click="resetPassword(scope.row)">重置密码</el-button>
             <el-button type="danger" link @click="deleteStudent(scope.row)">删除</el-button>
           </template>
         </el-table-column>
@@ -197,6 +198,38 @@ function deleteStudent(row) {
         })
         .catch(function(error) {
           ElMessage.error('删除失败')
+        })
+    })
+    .catch(function() {})
+}
+
+// 重置学生密码：由老师转告学生新密码，学生登录后自行修改
+function resetPassword(row) {
+  ElMessageBox.confirm(
+    '确定为「' + (row.name || row.studentNo) + '」重置密码吗？重置后旧密码立即失效，新密码只显示一次。',
+    '重置密码',
+    { type: 'warning', confirmButtonText: '确定重置', cancelButtonText: '取消' }
+  )
+    .then(function() {
+      api.post('/teacher/students/' + row.id + '/reset-password')
+        .then(function(res) {
+          if (res.success) {
+            var d = res.data || {}
+            ElMessageBox.alert(
+              '<div style="line-height:1.9">姓名：' + (d.name || row.name) +
+              '<br/>登录账号：<b>' + (d.username || row.studentNo) +
+              '</b><br/>新密码：<b style="font-size:18px;color:#c2410c">' + d.newPassword +
+              '</b><br/><span style="color:#888;font-size:12px">请立即抄送给学生，并提醒登录后修改密码</span></div>',
+              '重置成功',
+              { dangerouslyUseHTMLString: true, confirmButtonText: '我已记下' }
+            )
+          } else {
+            ElMessage.error(res.message || '重置失败')
+          }
+        })
+        .catch(function(error) {
+          var msg = (error && error.response && error.response.data && error.response.data.message) || '重置失败'
+          ElMessage.error(msg)
         })
     })
     .catch(function() {})

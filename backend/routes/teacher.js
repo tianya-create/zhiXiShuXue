@@ -575,6 +575,55 @@ router.delete('/students/:id', (req, res) => {
   }
 });
 
+// 重置学生密码（班主任可重置本班学生，管理员可重置任意学生）
+router.post('/students/:id/reset-password', (req, res) => {
+  try {
+    const teacherId = req.headers['x-user-id'];
+    const { id } = req.params;
+
+    const student = db.findById('students', id);
+    if (!student) {
+      return res.status(404).json({ success: false, message: '学生不存在' });
+    }
+
+    // 归属校验：学生所在班级必须由当前教师负责
+    const cls = student.classId ? db.findById('classes', student.classId) : null;
+    const isOwner = !!(cls && String(cls.teacherId) === String(teacherId));
+    const isAdmin = !!(req.user && req.user.role === 'admin');
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ success: false, message: '只能重置本班学生的密码' });
+    }
+
+    const user = db.findById('users', student.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: '学生账号不存在' });
+    }
+
+    const bcrypt = require('bcryptjs');
+    const crypto = require('crypto');
+    const alphabet = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let newPassword = '';
+    const bytes = crypto.randomBytes(10);
+    for (let i = 0; i < 10; i += 1) newPassword += alphabet[bytes[i] % alphabet.length];
+
+    db.updateById('users', student.userId, { password: bcrypt.hashSync(newPassword, 10) });
+    db.addLog(teacherId, 'RESET_STUDENT_PASSWORD', { studentId: id, studentName: student.name, classId: student.classId || '' });
+
+    res.json({
+      success: true,
+      message: '密码已重置，请转告学生并提醒尽快修改',
+      data: {
+        studentId: id,
+        name: student.name,
+        username: user.username,
+        newPassword
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // ========== 试卷管理 ==========
 
 // 上传试卷
