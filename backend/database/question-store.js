@@ -13,6 +13,11 @@ function getDatabase() {
   fs.mkdirSync(__dirname, { recursive: true });
   database = new DatabaseSync(DB_PATH);
   database.exec(`
+    PRAGMA journal_mode = WAL;
+    PRAGMA synchronous = NORMAL;
+    PRAGMA busy_timeout = 5000;
+  `);
+  database.exec(`
     CREATE TABLE IF NOT EXISTS questions (
       id TEXT PRIMARY KEY,
       type TEXT,

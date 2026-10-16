@@ -27,6 +27,13 @@ function getDatabase() {
 
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
   database = new DatabaseSync(DB_PATH);
+  // WAL 模式：读不阻塞写、写不阻塞读，避免偶发 "database is locked"；
+  // busy_timeout：遇到锁时最多等待 5 秒再报错，而非立即失败。
+  database.exec(`
+    PRAGMA journal_mode = WAL;
+    PRAGMA synchronous = NORMAL;
+    PRAGMA busy_timeout = 5000;
+  `);
   database.exec(`
     CREATE TABLE IF NOT EXISTS collections (
       seq        INTEGER PRIMARY KEY AUTOINCREMENT,
