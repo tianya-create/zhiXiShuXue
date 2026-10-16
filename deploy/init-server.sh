@@ -35,9 +35,10 @@ else
        | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
   chmod a+r /etc/apt/keyrings/docker.gpg
 
+  # 用 ID= 精确判断发行版（不能用 ID_LIKE，Ubuntu 的 ID_LIKE 也含 debian）
   CODENAME="$(. /etc/os-release && echo "$VERSION_CODENAME")"
   DISTRO="ubuntu"
-  grep -qi debian /etc/os-release && DISTRO="debian"
+  [ "$(. /etc/os-release && echo "$ID")" = "debian" ] && DISTRO="debian"
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://mirrors.aliyun.com/docker-ce/linux/${DISTRO} ${CODENAME} stable" \
     > /etc/apt/sources.list.d/docker.list
 

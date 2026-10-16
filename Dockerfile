@@ -3,6 +3,8 @@ FROM node:22-alpine AS frontend-builder
 WORKDIR /build/frontend
 COPY frontend/package.json ./
 RUN npm install --no-audit --no-fund
+# shared 目录被前端源码引用（knowledge-tree.json），必须一并复制
+COPY shared/ /build/shared/
 COPY frontend/ ./
 RUN npm run build
 
