@@ -178,7 +178,10 @@ function buildQuestion(kpId, kpName, domain, index, row) {
   }
 }
 
+// 手工题库自愈只需一次；每次调用都全量扫描题目集合代价太高
+let manualBankEnsured = false;
 function ensureManualQuestionBank() {
+  if (manualBankEnsured) return;
   const all = db.find('questions')
   const existingIds = new Set(all.map(item => item.id))
   GRAPH_NODES.forEach(([kpId, kpName, domain]) => {
@@ -188,6 +191,7 @@ function ensureManualQuestionBank() {
       if (!existingIds.has(question.id)) db.create('questions', question)
     })
   })
+  manualBankEnsured = true
 }
 
 function getQuestionBankByNode(filters = {}) {
