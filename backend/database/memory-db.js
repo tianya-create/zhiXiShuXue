@@ -191,7 +191,7 @@ function initializeData() {
     llmModel: process.env.LLM_MODEL || '',
     maxUploadSize: 10, // MB
     allowedFileTypes: ['jpg', 'jpeg', 'png', 'pdf'],
-    systemName: '智慧教育平台',
+    systemName: '智析数学',
     logo: '/logo.png'
   }
 

@@ -245,9 +245,9 @@ router.beforeEach(function (to, from, next) {
   // 设置页面标题
   var title = to.meta.title
   if (title) {
-    document.title = String(title) + ' - 智慧教育平台'
+    document.title = String(title) + ' - 智析数学'
   } else {
-    document.title = '智慧教育平台'
+    document.title = '智析数学'
   }
 
   // 检查是否需要登录

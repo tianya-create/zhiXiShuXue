@@ -1,7 +1,7 @@
 {
-  "name": "education-backend",
+  "name": "zhixi-math-backend",
   "version": "1.0.0",
-  "description": "在线教育平台后端 API",
+  "description": "智析数学 V1.0 后端",
   "main": "server.js",
   "scripts": {
     "dev": "node ensure-port-free.js 5001 && node server.js",

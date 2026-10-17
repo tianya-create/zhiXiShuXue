@@ -101,7 +101,7 @@ router.post('/upload', (req, res) => {
 
 router.get('/system-info', (req, res) => {
   try {
-    res.json({ success: true, data: { name: '智慧教育平台', version: '1.0.0', description: '在线教育平台 - 教师端、学生端、后台管理端' } });
+    res.json({ success: true, data: { name: '智析数学', version: '1.0.0', description: 'K12 数学在线教育平台（教师端/学生端/后台管理端）' } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

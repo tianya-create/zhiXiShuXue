@@ -1,5 +1,5 @@
 {
-  "name": "education-platform-frontend",
+  "name": "zhixi-math-frontend",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -23,5 +23,6 @@
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",
     "vite": "^5.0.0"
-  }
+  },
+  "description": "智析数学 V1.0 前端"
 }

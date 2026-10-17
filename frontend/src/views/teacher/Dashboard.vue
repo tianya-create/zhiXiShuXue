@@ -5,7 +5,7 @@
       <div class="header-content">
         <div class="header-text">
           <h2>教师工作台</h2>
-          <p>欢迎使用智慧教育平台，今天是 {{ currentDate }}</p>
+          <p>欢迎使用智析数学，今天是 {{ currentDate }}</p>
         </div>
       </div>
     </header>

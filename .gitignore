@@ -101,3 +101,16 @@ backend/database/*.sqlite.tmp
 # 用户上传文件
 backend/uploads/*
 !backend/uploads/.gitkeep
+
+# ===== AI 工具配置目录（非软件本体，不纳入版本库）=====
+.claude/
+.trae/
+.agents/
+skills-lock.json
+
+# ===== 开发过程临时补丁脚本（不再提交）=====
+tmp_*.py
+tmp_*.js
+
+# ===== 软著申报材料生成物 =====
+docs/软著申报/

@@ -1,9 +1,0 @@
-from pathlib import Path
-p = Path(r'c:\Users\32328\Desktop\zhiXiShuXue\backend\database\memory-db.js')
-text = p.read_text(encoding='utf-8')
-old = "// 初始化数据\ninitializeData();\n\n// 导出数据库实例\nconst database = new Database();\nmodule.exports = database;"
-new = "// 初始化数据\nDatabase.prototype.getMistakeShardCollection = function(studentId) {\n  const digits = String(studentId || '').replace(/\\D/g, '');\n  const num = digits ? parseInt(digits, 10) : 0;\n  return `student_mistake_${num % 4}`;\n};\n\nDatabase.prototype.getAllMistakesForStudent = function(studentId) {\n  return [0, 1, 2, 3]\n    .flatMap(index => this.data[`student_mistake_${index}`] || [])\n    .filter(item => item.studentId === studentId)\n    .sort((a, b) => new Date(b.lastPracticeTime || b.createdAt || 0) - new Date(a.lastPracticeTime || a.createdAt || 0));\n};\n\nDatabase.prototype.upsertStudentMistake = function(studentId, payload) {\n  const collection = this.getMistakeShardCollection(studentId);\n  const existing = (this.data[collection] || []).find(item => item.studentId === studentId && item.questionId === payload.questionId);\n  if (existing) {\n    return this.updateById(collection, existing.id, payload);\n  }\n  return this.create(collection, { studentId, ...payload });\n};\n\nDatabase.prototype.resolveStudentMistake = function(studentId, questionId) {\n  const collection = this.getMistakeShardCollection(studentId);\n  const existing = (this.data[collection] || []).find(item => item.studentId === studentId && item.questionId === questionId);\n  if (!existing) return null;\n  return this.updateById(collection, existing.id, {\n    isResolved: true,\n    lastPracticeTime: new Date().toISOString()\n  });\n};\n\ninitializeData();\n\n// 导出数据库实例\nconst database = new Database();\nmodule.exports = database;"
-if old not in text:
-    raise SystemExit('target block not found')
-p.write_text(text.replace(old, new), encoding='utf-8')
-print('patched memory-db.js')

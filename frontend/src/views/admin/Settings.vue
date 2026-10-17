@@ -115,7 +115,7 @@ var tutorSettings = reactive({
   aiTutorManagedByEnv: false,
   aiTutorKnowledgeScope: []
 })
-var systemSettings = reactive({ systemName: '智慧教育平台', maxUploadSize: 10, allowedFileTypes: [] })
+var systemSettings = reactive({ systemName: '智析数学', maxUploadSize: 10, allowedFileTypes: [] })
 
 var fileTypesStr = ref('')
 var knowledgeScopeOptions = ref([])
