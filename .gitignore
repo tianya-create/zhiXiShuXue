@@ -1,5 +1,7 @@
 node_modules
 dist
+.verify-dist/
+frontend/.verify-dist/
 .DS_Store
 *.swp
 .git/*
@@ -90,6 +92,7 @@ logs/
 *.csv
 
 backend/database/questions.sqlite
+backend/database/questions.sqlite-*
 
 # 应用数据（运行时生成，含用户/作业/成绩等，切勿提交）
 backend/database/app.sqlite

@@ -67,4 +67,26 @@ function expandKnowledgeIds(id) {
   return Array.from(new Set([key, ...reverse]))
 }
 
-module.exports = { KNOWLEDGE_EQUIV, expandKnowledgeIds }
+// 教材目录节点（用于把老题库编号归一）
+const CURRICULUM_IDS = new Set(
+  require('../../shared/knowledge-tree.json').categories.flatMap((category) =>
+    category.nodes.map((node) => node.id)
+  )
+)
+
+/**
+ * 把任意知识点编号归一到教材目录节点。
+ * 掌握度、学情统计、知识点图谱都必须落在目录节点上，否则 30 个节点里
+ * 会有一半永远没有数据（题还挂在 kp-002 这类老编号上）。
+ */
+function canonicalKnowledgeId(id) {
+  const key = String(id || '').trim()
+  if (!key) return ''
+  if (CURRICULUM_IDS.has(key)) return key
+  for (const [nodeId, list] of Object.entries(KNOWLEDGE_EQUIV)) {
+    if (CURRICULUM_IDS.has(nodeId) && Array.isArray(list) && list.includes(key)) return nodeId
+  }
+  return key
+}
+
+module.exports = { KNOWLEDGE_EQUIV, expandKnowledgeIds, canonicalKnowledgeId }

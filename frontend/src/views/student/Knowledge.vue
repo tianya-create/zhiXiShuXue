@@ -89,10 +89,10 @@
                   <span class="practice-title">第 {{ index + 1 }} 题 · {{ getQuestionTypeLabel(item.type) }}</span>
                   <el-tag size="small" effect="plain">{{ getDifficultyLabel(item.difficulty) }}</el-tag>
                 </div>
-                <div class="practice-content">{{ item.content }}</div>
+                <MathText class="practice-content" :text="item.content" />
                 <div v-if="item.options && item.options.length" class="practice-options">
                   <div v-for="(option, optIdx) in item.options" :key="optIdx" class="practice-option">
-                    {{ String.fromCharCode(65 + optIdx) }}. {{ option }}
+                    {{ String.fromCharCode(65 + optIdx) }}. <MathText :text="option" />
                   </div>
                 </div>
                 <div class="practice-meta">
@@ -262,7 +262,7 @@
             <div class="drawer-title">近 30 日关联错题</div>
             <div v-if="detailData.wrongQuestions?.length" class="wrong-list">
               <div v-for="q in detailData.wrongQuestions" :key="q.id" class="wrong-item">
-                <div class="wrong-content">{{ q.content }}</div>
+                <MathText class="wrong-content" :text="q.content" />
                 <div class="wrong-answers">
                   <div class="ans-box">
                     <span class="ans-label">你的答案</span>
@@ -286,7 +286,7 @@
             <div class="drawer-title">推荐补练变式题</div>
             <div v-if="detailData.recommendedQuestions?.length" class="recommend-list">
               <div v-for="q in detailData.recommendedQuestions" :key="q.id" class="recommend-item">
-                <div class="recommend-content">{{ q.content }}</div>
+                <MathText class="recommend-content" :text="q.content" />
                 <div class="recommend-footer">
                   <el-tag size="small">{{ getDifficultyLabel(q.difficulty) }}</el-tag>
                   <el-button type="primary" size="small" plain @click="addToPracticeQueue(q)">加入补练队列</el-button>
@@ -311,10 +311,10 @@
               </el-tag>
               <el-tag size="small" effect="plain" style="margin-left: 8px;">{{ getQuestionTypeLabel(q.type) }}</el-tag>
             </div>
-            <div class="q-content">{{ q.content }}</div>
+            <MathText class="q-content" :text="q.content" />
             <div v-if="q.options?.length" class="q-options">
               <div v-for="(opt, optIdx) in q.options" :key="optIdx" class="q-option">
-                {{ String.fromCharCode(65 + optIdx) }}. {{ opt }}
+                {{ String.fromCharCode(65 + optIdx) }}. <MathText :text="opt" />
               </div>
             </div>
             <el-collapse>
@@ -333,6 +333,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import MathText from '@/components/MathText.vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api from '@/utils/api'

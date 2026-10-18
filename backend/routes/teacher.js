@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const db = require('../database/memory-db');
+const { normalizeQuestion, publicQuestion } = require('../services/question-quality');
 const { recordQuestionResults } = require('../services/math-bank');
 
 function normalizeUploadedFileName(fileName) {
@@ -747,25 +748,16 @@ router.get('/questions', (req, res) => {
 // 添加题目
 router.post('/questions', (req, res) => {
   try {
-    const { paperId, type, content, options, answer, knowledgePoints, difficulty, score } = req.body;
+    const paperId = req.body.paperId || null;
 
-    if (!paperId || !type || !content) {
-      return res.status(400).json({ success: false, message: '参数不完整' });
-    }
-
+    // 统一走题库质量校验：题型、选项唯一性、答案对应、分值、解析完整度
     const question = db.create('questions', {
-      paperId,
-      type, // choice, fill, shortAnswer
-      content,
-      options: options || [],
-      answer,
-      knowledgePoints: knowledgePoints || [],
-      difficulty: difficulty || 'medium', // easy, medium, hard
-      score: score || 1
+      ...normalizeQuestion(req.body, {}, req.user),
+      paperId
     });
 
     // 更新试卷题目列表
-    const paper = db.findById('papers', paperId);
+    const paper = paperId ? db.findById('papers', paperId) : null;
     if (paper) {
       db.updateById('papers', paperId, {
         questions: [...paper.questions, question.id]
@@ -774,7 +766,7 @@ router.post('/questions', (req, res) => {
 
     res.json({ success: true, data: question, message: '题目添加成功' });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(400).json({ success: false, message: error.message });
   }
 });
 
@@ -782,11 +774,14 @@ router.post('/questions', (req, res) => {
 router.put('/questions/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { content, options, answer, knowledgePoints, difficulty, score } = req.body;
-
-    const updated = db.updateById('questions', id, {
-      content, options, answer, knowledgePoints, difficulty, score
-    });
+    const existing = db.findById('questions', id);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: '题目不存在' });
+    }
+    if (req.user && req.user.role === 'teacher' && existing.createdBy && existing.createdBy !== req.user.id) {
+      return res.status(403).json({ success: false, message: '仅可修改自己录入的题目' });
+    }
+    const updated = db.updateById('questions', id, normalizeQuestion(req.body, existing, req.user || { id: existing.createdBy, role: 'teacher' }));
 
     if (!updated) {
       return res.status(404).json({ success: false, message: '题目不存在' });
@@ -794,7 +789,33 @@ router.put('/questions/:id', (req, res) => {
 
     res.json({ success: true, data: updated, message: '题目更新成功' });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+// 审核题目：通过前必须有解析，修改过的题目会重新回到待审核
+router.post('/questions/:id/review', (req, res) => {
+  try {
+    const existing = db.findById('questions', req.params.id);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: '题目不存在' });
+    }
+    if (req.user && req.user.role === 'teacher' && existing.createdBy && existing.createdBy !== req.user.id) {
+      return res.status(403).json({ success: false, message: '只能审核自己录入的题目' });
+    }
+    const status = req.body.reviewStatus;
+    if (!['approved', 'pending', 'withdrawn'].includes(status)) {
+      return res.status(400).json({ success: false, message: '审核状态无效' });
+    }
+    const saved = db.updateById(
+      'questions',
+      existing.id,
+      normalizeQuestion({ ...existing, reviewStatus: status }, existing, req.user || { id: existing.createdBy, role: 'admin' })
+    );
+    db.addLog((req.user && req.user.id) || existing.createdBy, 'REVIEW_QUESTION', { questionId: existing.id, reviewStatus: status });
+    res.json({ success: true, data: saved, message: status === 'approved' ? '题目已通过审核' : '题目状态已更新' });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
   }
 });
 

@@ -155,6 +155,9 @@
         </el-card>
       </div>
     </div>
+
+    <!-- 艾宾浩斯复习计划：按遗忘曲线提醒今天该复习的题 -->
+    <ReviewPlan class="dashboard-review-plan" />
   </div>
 </template>
 
@@ -165,6 +168,7 @@ import api from '@/utils/api'
 import * as echarts from 'echarts'
 import dayjs from 'dayjs'
 import { getMasteryStatus } from '@/utils/knowledge-meta'
+import ReviewPlan from '@/components/ReviewPlan.vue'
 
 const router = useRouter()
 let chart = null
@@ -792,5 +796,8 @@ onBeforeUnmount(() => { window.removeEventListener('resize', renderChart); if (c
   .mastery-breakdown { grid-template-columns: 1fr; }
   .assignment-item { flex-direction: column; align-items: flex-start; }
   .assignment-item .el-button { width: 100%; margin-top: 16px; }
+}
+.dashboard-review-plan {
+  margin-top: 20px;
 }
 </style>

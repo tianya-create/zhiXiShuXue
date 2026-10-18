@@ -8,7 +8,7 @@
     <el-card class="gradient-card" v-loading="loading">
       <template #header>
         <div class="card-header">
-          <span>题目列表</span>
+          <span>题目列表<small v-if="draftStatus" class="draft-status">{{ draftStatus }}</small></span>
           <div v-if="!viewMode">
             <el-button type="primary" @click="submitAnswers" :loading="submitting">
               提交答案
@@ -24,7 +24,8 @@
           <el-tag type="info">{{ question.score }}分</el-tag>
         </div>
         
-        <div class="question-content">{{ question.content }}</div>
+        <MathText class="question-content" :text="question.content" />
+        <img v-if="question.imageUrl" :src="question.imageUrl" alt="题目附图" class="question-image" />
         
         <div v-if="question.type === 'choice'" class="question-options">
           <el-radio-group v-model="answers[question.id]" :disabled="viewMode">
@@ -34,7 +35,7 @@
               :label="String.fromCharCode(65 + optIndex)"
               class="option-item"
             >
-              {{ String.fromCharCode(65 + optIndex) }}. {{ opt }}
+              {{ String.fromCharCode(65 + optIndex) }}. <MathText :text="opt" />
             </el-radio>
           </el-radio-group>
         </div>
@@ -58,8 +59,9 @@
         </div>
         
         <div v-if="viewMode && hasResult(question.id)" class="answer-result">
-          <div :class="['result-item', getResultCorrect(question.id) ? 'correct' : 'wrong']">
+          <div :class="['result-item', getResultPending(question.id) ? 'pending' : (getResultCorrect(question.id) ? 'correct' : 'wrong')]">
             <span>你的答案：{{ getAnswer(question.id) }}</span>
+            <el-tag v-if="getResultPending(question.id)" type="warning" size="small">等待老师复核</el-tag>
           </div>
           <div class="correct-answer">
             标准答案：{{ getCorrectAnswer(question.id) || '待教师批改' }}
@@ -78,6 +80,8 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/utils/api'
+import MathText from '@/components/MathText.vue'
+import { useAnswerDraft } from '@/composables/useAnswerDraft'
 
 var route = useRoute()
 var router = useRouter()
@@ -92,6 +96,10 @@ var results = reactive({})
 var viewMode = computed(function() {
   return route.query.view === 'result'
 })
+
+// 答题草稿：每 0.7 秒自动保存到本机与服务端，刷新/断网/换设备都能接着答
+var draft = useAnswerDraft('assignment-' + route.params.id, answers, questions)
+var draftStatus = draft.status
 
 var assignmentTitle = computed(function() {
   if (!assignment.value || !assignment.value.title) {
@@ -118,6 +126,12 @@ function hasResult(questionId) {
 function getResultCorrect(questionId) {
   var result = results[questionId]
   return result ? result.correct : false
+}
+
+// correct 为 null 表示判分器无法确定（解答题/含根号等符号），交给老师复核
+function getResultPending(questionId) {
+  var result = results[questionId]
+  return !!(result && (result.needsReview || result.correct === null))
 }
 
 function getAnswer(questionId) {
@@ -157,6 +171,8 @@ function loadAssignment() {
       
       if (viewMode.value) {
         loadResults()
+      } else {
+        draft.restore()
       }
     }
   }).catch(function() {
@@ -206,10 +222,13 @@ function submitAnswers() {
     submitting.value = true
     
     api.post('/student/assignments/' + route.params.id + '/submit', {
-      answers: answers
+      answers: answers,
+      requestId: draft.requestId.value
     }).then(function(res) {
       if (res.success) {
-        ElMessage.success('提交成功')
+        draft.pause()
+        draft.clear()
+        ElMessage.success(res.message || '提交成功')
         if (res.data && res.data.answerId) {
           sessionStorage.setItem('latest-answer-' + route.params.id, res.data.answerId)
         }
@@ -225,7 +244,7 @@ function submitAnswers() {
 }
 
 function getTypeText(type) {
-  var map = { choice: '选择题', fill: '填空题', shortAnswer: '简答题' }
+  var map = { choice: '选择题', fill: '填空题', shortAnswer: '简答题', subjective: '解答题', judge: '判断题' }
   return map[type] || '未知'
 }
 </script>
@@ -290,6 +309,21 @@ function getTypeText(type) {
   color: #F56C6C;
 }
 
+.result-item.pending {
+  background: #fdf6ec;
+  color: #b88230;
+}
+.draft-status {
+  margin-left: 10px;
+  font-size: 12px;
+  font-weight: normal;
+  color: var(--text-secondary);
+}
+.question-image {
+  max-width: 100%;
+  margin: 8px 0;
+  border-radius: 6px;
+}
 .correct-answer {
   margin-top: 8px;
   color: #67C23A;

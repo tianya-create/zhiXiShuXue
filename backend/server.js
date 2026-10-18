@@ -55,6 +55,7 @@ app.use('/api', privateResponse);
 app.use('/api/teacher', teacherGuard);
 
 const authRoutes = require('./routes/auth');
+const teachingRoutes = require('./routes/teaching');
 const teacherRoutes = require('./routes/teacher');
 const studentRoutes = require('./routes/student');
 const adminRoutes = require('./routes/admin');
@@ -63,6 +64,9 @@ const aiTutorAdminRoutes = require('./routes/ai-tutor-admin');
 const commonRoutes = require('./routes/common');
 
 app.use('/api/auth', authRoutes);
+// 教学闭环扩展（已学范围 / 学情统计 / 审核中心 / 题目纠错）
+// 先挂载：其中的 /analytics 接口是真实统计，覆盖 teacher.js 里的演示实现
+app.use('/api/teacher', teachingRoutes);
 app.use('/api/teacher', teacherRoutes);
 app.use('/api/student', studentRoutes);
 // 账号治理路由先挂载：其中 PUT/DELETE /users/:id 是 admin.js 同名接口的加强版

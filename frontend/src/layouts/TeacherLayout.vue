@@ -27,6 +27,7 @@ const menu = [
     ]
   },
   { index: '/teacher/grading', label: '批改中心', icon: 'EditPen' },
+  { index: '/teacher/review-center', label: '复核与纠错', icon: 'Finished' },
   {
     index: 'analytics',
     label: '学情分析',

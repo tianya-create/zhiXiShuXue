@@ -204,7 +204,7 @@
               <span>满分 {{ item.fullScore || 0 }} 分</span>
             </div>
             <div class="question-line"><span>题型：</span>{{ getTypeText(item.questionType) }}</div>
-            <div class="question-line"><span>题干：</span>{{ item.content || '-' }}</div>
+            <div class="question-line"><span>题干：</span><MathText :text="item.content || '-'" /></div>
             <div class="question-line"><span>学生答案：</span>{{ item.studentAnswer || '未作答' }}</div>
             <div class="question-line"><span>标准答案：</span>{{ item.standardAnswer || '无' }}</div>
             <div v-if="item.questionType !== 'shortAnswer' && item.questionType !== 'imageUpload'" class="question-line">
@@ -253,6 +253,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import MathText from '@/components/MathText.vue'
 import { ElMessage } from 'element-plus'
 import api from '@/utils/api'
 import dayjs from 'dayjs'

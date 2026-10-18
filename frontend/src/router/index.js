@@ -63,6 +63,12 @@ const routes = [
         meta: { title: '批改中心' }
       },
       {
+        path: 'review-center',
+        name: 'TeacherReviewCenter',
+        component: function () { return import('@/views/teacher/ReviewCenter.vue') },
+        meta: { title: '复核与纠错' }
+      },
+      {
         path: 'analytics/class',
         name: 'TeacherClassAnalytics',
         component: function () { return import('@/views/teacher/ClassAnalytics.vue') },

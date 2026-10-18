@@ -25,9 +25,18 @@
             {{ formatDate(scope.row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200">
+        <el-table-column label="已学范围" width="150">
+          <template #default="scope">
+            <el-tag v-if="(scope.row.taughtKnowledgePointIds || []).length" size="small" type="success">
+              {{ scope.row.taughtKnowledgePointIds.length }} 个知识点
+            </el-tag>
+            <el-button v-else type="warning" link @click="openCurriculum(scope.row)">待配置</el-button>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="300">
           <template #default="scope">
             <el-button type="primary" link @click="viewStudents(scope.row)">查看学生</el-button>
+            <el-button type="primary" link @click="openCurriculum(scope.row)">教材进度</el-button>
             <el-button type="primary" link @click="editClass(scope.row)">编辑</el-button>
             <el-button type="danger" link @click="deleteClass(scope.row)">删除</el-button>
           </template>
@@ -63,6 +72,9 @@
         <el-button type="primary" @click="submitForm">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 已学范围（教材进度）：决定个性化推荐的边界 -->
+    <ClassCurriculum ref="curriculumRef" />
   </div>
 </template>
 
@@ -72,12 +84,18 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/utils/api'
 import dayjs from 'dayjs'
+import ClassCurriculum from '@/components/ClassCurriculum.vue'
 
 var router = useRouter()
 var loading = ref(false)
 var dialogVisible = ref(false)
 var isEdit = ref(false)
 var formRef = ref(null)
+var curriculumRef = ref(null)
+
+function openCurriculum(row) {
+  curriculumRef.value.open(row)
+}
 
 var classes = ref([])
 var classForm = reactive({

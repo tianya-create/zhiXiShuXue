@@ -59,6 +59,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api from '@/utils/api'
 import QuestionCard from '@/components/QuestionCard.vue'
+import { useAnswerDraft } from '@/composables/useAnswerDraft'
 
 const route = useRoute()
 const loading = ref(false)
@@ -69,6 +70,8 @@ const answers = ref({})
 const results = ref({})
 const practiceMeta = reactive({ knowledgePointId: '', mode: 'weak-point', title: '薄弱补练' })
 const batchSummary = reactive({ accuracy: 0, total: 0, knowledgePoints: [] })
+// 补练草稿：按知识点存档，学生中途离开可以回来接着做
+const draft = useAnswerDraft('practice-' + (route.query.kpId || 'custom'), answers, questions)
 
 const pageTitle = computed(() => practiceMeta.title || '薄弱补练')
 const pageDesc = computed(() => practiceMeta.mode === 'wrong-question'
@@ -114,7 +117,7 @@ function loadRecommendations(refresh) {
         }
       }
       return null
-    }).finally(() => {
+    }).then(() => draft.restore()).finally(() => {
       loading.value = false
     })
     return
@@ -144,20 +147,25 @@ function submitBatch() {
     }, {}),
     questionIds: filledIds,
     mode: practiceMeta.mode,
-    title: practiceMeta.title
+    title: practiceMeta.title,
+    requestId: draft.requestId.value
   }).then(res => {
     if (res.success) {
       const data = res.data || {}
       ;(data.questionResults || []).forEach(item => {
         results.value[item.questionId] = {
           isCorrect: !!item.correct,
+          needsReview: !!item.needsReview,
           userAnswer: item.answer || '',
           correctAnswer: item.correctAnswer || '-',
           explanation: item.correct ? '回答正确，继续保持。' : '建议回看知识点后再次尝试。'
         }
       })
-      const total = (data.questionResults || []).length
-      const correct = (data.questionResults || []).filter(item => item.correct).length
+      draft.pause()
+      draft.clear()
+      const judged = (data.questionResults || []).filter(item => !item.needsReview)
+      const total = judged.length
+      const correct = judged.filter(item => item.correct).length
       batchSummary.accuracy = total ? Math.round(correct / total * 100) : 0
       batchSummary.total = total
       batchSummary.knowledgePoints = (data.knowledgePointChanges || []).map(item => ({

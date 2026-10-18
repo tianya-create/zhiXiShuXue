@@ -2,7 +2,7 @@
   <div class="student-analytics">
     <div class="page-header">
       <h2>学生学情分析</h2>
-      <p>查看学生个人学习情况</p>
+      <p>选一个学生，看他的成绩变化、知识点掌握度和错题。</p>
     </div>
     
     <el-card class="gradient-card">
@@ -69,7 +69,7 @@
       </div>
       <div class="chart-col">
         <el-card class="gradient-card chart-card" id="knowledge-section">
-          <template #header>知识点掌握分布</template>
+          <template #header>知识点掌握度</template>
           <div ref="knowledgeChartRef" class="chart-container"></div>
         </el-card>
       </div>
@@ -86,17 +86,17 @@
       <el-table :data="wrongQuestions" max-height="400" class="safe-table wrong-table">
         <el-table-column prop="content" label="题目内容" min-width="260">
           <template #default="scope">
-            <span class="question-content">{{ scope.row.content }}</span>
+            <MathText class="question-content" :text="scope.row.content" />
           </template>
         </el-table-column>
-        <el-table-column prop="correctAnswer" label="正确答案" width="120">
+        <el-table-column prop="correctAnswer" label="正确答案" min-width="200">
           <template #default="scope">
-            <span class="answer-text">{{ scope.row.correctAnswer }}</span>
+            <MathText class="answer-text" :text="scope.row.correctAnswer" />
           </template>
         </el-table-column>
-        <el-table-column prop="studentAnswer" label="学生答案" width="120">
+        <el-table-column prop="studentAnswer" label="学生答案" min-width="200">
           <template #default="scope">
-            <span class="answer-text">{{ scope.row.studentAnswer }}</span>
+            <MathText class="answer-text" :text="scope.row.studentAnswer" />
           </template>
         </el-table-column>
       </el-table>
@@ -105,10 +105,14 @@
 </template>
 
 <script setup>
+import { NB_CHART as CHART_COLORS } from '@/utils/notebook-colors'
+import MathText from '@/components/MathText.vue'
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/utils/api'
 import * as echarts from 'echarts'
+import { NB_ECHARTS_THEME, registerNotebookChartTheme } from '@/utils/notebook-colors'
+registerNotebookChartTheme(echarts)
 
 var route = useRoute()
 var router = useRouter()
@@ -260,7 +264,7 @@ function getAverageMastery(mastery) {
 function getChart(dom, chart) {
   if (!dom) return null
   if (!chart || chart.isDisposed()) {
-    return echarts.init(dom)
+    return echarts.init(dom, NB_ECHARTS_THEME)
   }
   return chart
 }
@@ -303,7 +307,7 @@ function renderScoreChart(dom, trend) {
 
   if (xData.length === 0) {
     xData = ['暂无数据']
-    yData = [0]
+    yData = [null]
   }
 
   scoreChart.setOption({
@@ -313,13 +317,13 @@ function renderScoreChart(dom, trend) {
       type: 'category',
       boundaryGap: false,
       data: xData,
-      axisLabel: { color: '#606266' }
+      axisLabel: { color: CHART_COLORS.axis }
     },
     yAxis: {
       type: 'value',
       min: 0,
       max: 100,
-      axisLabel: { color: '#606266' },
+      axisLabel: { color: CHART_COLORS.axis },
       splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.22)' } }
     },
     series: [{
@@ -328,9 +332,9 @@ function renderScoreChart(dom, trend) {
       data: yData,
       smooth: true,
       symbolSize: 8,
-      lineStyle: { color: '#409EFF', width: 3 },
-      itemStyle: { color: '#409EFF' },
-      areaStyle: { color: 'rgba(64, 158, 255, 0.12)' }
+      lineStyle: { color: CHART_COLORS.brand, width: 3 },
+      itemStyle: { color: CHART_COLORS.brand },
+      areaStyle: { color: 'rgba(45, 142, 232, 0.12)' }
     }]
   }, true)
 }
@@ -339,41 +343,52 @@ function renderKnowledgeChart(dom, mastery) {
   knowledgeChart = getChart(dom, knowledgeChart)
   if (!knowledgeChart) return
 
-  var keys = Object.keys(mastery).slice(0, 8)
-  var pieData = keys.map(function(key) {
+  // 各知识点掌握度互相独立、加起来不等于 100%，所以用条形图而不是饼图；掌握度最低的排在最上面
+  var list = Object.keys(mastery).map(function(key) {
     return {
       name: getKnowledgePointName(key),
-      value: getMasteryValue(mastery[key])
+      value: Math.round(getMasteryValue(mastery[key]))
     }
-  }).filter(function(item) {
-    return item.value > 0
-  })
+  }).sort(function(a, b) {
+    return a.value - b.value
+  }).slice(0, 8).reverse()
 
-  var hasData = pieData.length > 0
-  if (!hasData) {
-    pieData = [{ name: '暂无数据', value: 1, itemStyle: { color: '#dcdfe6' } }]
-  }
+  var hasData = list.length > 0
 
   knowledgeChart.setOption({
-    color: ['#409EFF', '#67C23A', '#E6A23C', '#F56C6C', '#909399', '#7C3AED', '#14B8A6', '#F97316'],
+    title: hasData ? { show: false } : {
+      text: '暂无数据',
+      left: 'center',
+      top: 'middle',
+      textStyle: { color: CHART_COLORS.axis, fontSize: 14, fontWeight: 'normal' }
+    },
     tooltip: {
-      trigger: 'item',
-      formatter: hasData ? '{b}: {c}%' : '{b}'
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      valueFormatter: function(v) { return v + '%' }
     },
-    legend: {
-      bottom: 0,
-      type: 'scroll',
-      textStyle: { color: '#606266' }
+    grid: { left: 8, right: 40, top: 10, bottom: 10, containLabel: true },
+    xAxis: {
+      type: 'value',
+      max: 100,
+      axisLabel: { color: CHART_COLORS.axis, formatter: '{value}%' },
+      splitLine: { lineStyle: { color: CHART_COLORS.splitLine } }
     },
-    series: [{
-      name: '知识点掌握情况',
-      type: 'pie',
-      radius: ['42%', '68%'],
-      center: ['50%', '44%'],
-      avoidLabelOverlap: true,
-      label: { formatter: hasData ? '{b}\n{c}%' : '{b}' },
-      data: pieData
-    }]
+    yAxis: {
+      type: 'category',
+      data: list.map(function(item) { return item.name }),
+      axisLabel: { color: CHART_COLORS.axis, width: 90, overflow: 'truncate' }
+    },
+    series: hasData ? [{
+      name: '掌握度',
+      type: 'bar',
+      barMaxWidth: 22,
+      data: list.map(function(item) {
+        var color = item.value >= 80 ? CHART_COLORS.mastered : item.value >= 60 ? CHART_COLORS.learning : CHART_COLORS.weak
+        return { value: item.value, itemStyle: { color: color, borderRadius: [0, 8, 8, 0] } }
+      }),
+      label: { show: true, position: 'right', formatter: '{c}%', color: CHART_COLORS.axis }
+    }] : []
   }, true)
 }
 
@@ -396,17 +411,17 @@ function renderLevelChart(dom, mastery, trendData) {
         { name: '错题控制', max: 100 },
         { name: '稳定性', max: 100 }
       ],
-      splitArea: { areaStyle: { color: ['rgba(64, 158, 255, 0.03)', 'rgba(64, 158, 255, 0.08)'] } },
-      axisName: { color: '#606266' }
+      splitArea: { areaStyle: { color: ['rgba(45, 142, 232, 0.03)', 'rgba(45, 142, 232, 0.08)'] } },
+      axisName: { color: CHART_COLORS.axis }
     },
     series: [{
       name: '综合能力',
       type: 'radar',
       data: [{
         value: [latestScoreValue, masteryAverage, wrongControl, calculateStability(trendData)],
-        areaStyle: { color: 'rgba(103, 194, 58, 0.2)' },
-        lineStyle: { color: '#67C23A', width: 3 },
-        itemStyle: { color: '#67C23A' }
+        areaStyle: { color: 'rgba(52, 199, 193, 0.2)' },
+        lineStyle: { color: CHART_COLORS.brandAlt, width: 3 },
+        itemStyle: { color: CHART_COLORS.brandAlt }
       }]
     }]
   }, true)
@@ -566,7 +581,7 @@ function exportPDF() {
     .footer {
       margin-top: 50px;
       text-align: center;
-      font-size: 12px;
+      font-size: 14px;
       color: #666;
     }
   <\/style>
@@ -607,7 +622,7 @@ function exportPDF() {
   </table>
   
   <div class="footer">
-    <p>© 2024 在线教育平台</p>
+    <p>智析数学 · 学情报告</p>
   </div>
 </body>
 </html>

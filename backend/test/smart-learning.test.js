@@ -18,9 +18,10 @@ describe('recommendation factors', () => {
 })
 
 describe('auto grade', () => {
-  test('regex subjective grading', () => {
+  test('subjective answers always wait for teacher review', () => {
     const result = gradeAnswer({ type: 'subjective', answer_text: '^x=±2$' }, 'x=±2')
-    expect(result.isCorrect).toBe(true)
+    // 文字相似度不能作为解答题最终判分依据，必须由教师复核过程
+    expect(result.needsReview).toBe(true)
   })
 
   test('levenshtein subjective grading', () => {
@@ -33,7 +34,8 @@ describe('mastery state machine', () => {
   test('updateMastery returns valid status', () => {
     db.create('student_answer', { userId: 'student-001', questionId: 'q1', kpCode: 'kp-001', isCorrect: true, costTime: 60 })
     const mastery = updateMastery('student-001', 'kp-001')
-    expect(['待强化', '学习中', '已掌握']).toContain(mastery.status)
+    // 单题作答样本不足，不能直接认定已掌握
+    expect(['已掌握', '待巩固', '薄弱', '样本不足', '尚未测评']).toContain(mastery.status)
   })
 })
 

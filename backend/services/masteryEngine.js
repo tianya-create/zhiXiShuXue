@@ -1,9 +1,10 @@
 const db = require('../database/memory-db');
 
 function getStatus(mastery) {
+  if (mastery === null || mastery === undefined) return '尚未测评';
   if (mastery >= 80) return '已掌握';
-  if (mastery >= 60) return '学习中';
-  return '待强化';
+  if (mastery >= 60) return '待巩固';
+  return '薄弱';
 }
 
 function average(values) {
@@ -17,13 +18,19 @@ function getKnowledgeAttempts(userId, kpCode) {
     .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 }
 
-function updateMastery(userId, kpCode) {
+/**
+ * 只计算不落库。样本不足（少于 5 题或少于 3 道不同题）时给出置信度提示，
+ * 并且掌握度封顶 79，避免"做了 1 道题就算已掌握"。
+ */
+function calculateMastery(userId, kpCode) {
   const attempts = getKnowledgeAttempts(userId, kpCode);
   const latest10 = attempts.slice(-10);
+  const distinctQuestions = new Set(latest10.map((item) => item.questionId).filter(Boolean)).size;
+  const sufficient = latest10.length >= 5 && distinctQuestions >= 3;
   const correctRate = latest10.length
     ? latest10.filter((item) => item.isCorrect).length / latest10.length
     : 0;
-  let mastery = Math.round(correctRate * 100);
+  let mastery = latest10.length ? Math.round(correctRate * 100) : null;
 
   const last3 = attempts.slice(-3);
   const last2 = attempts.slice(-2);
@@ -38,16 +45,22 @@ function updateMastery(userId, kpCode) {
     mastery = Math.max(0, mastery - 10);
   }
 
-  const existing = db.findOne('student_knowledge_mastery', { userId, kpCode });
-  const payload = {
+  return {
     userId,
     kpCode,
-    mastery,
-    status: getStatus(mastery),
+    mastery: mastery !== null && !sufficient ? Math.min(79, mastery) : mastery,
+    status: !attempts.length ? '尚未测评' : !sufficient ? '样本不足' : getStatus(mastery),
+    confidence: sufficient ? 'sufficient' : attempts.length ? 'limited' : 'none',
+    distinctQuestions,
     correctRate: Number(correctRate.toFixed(2)),
     attemptCount: attempts.length,
     updatedAt: new Date().toISOString()
   };
+}
+
+function updateMastery(userId, kpCode) {
+  const payload = calculateMastery(userId, kpCode);
+  const existing = db.findOne('student_knowledge_mastery', { userId, kpCode });
 
   if (existing) {
     return db.updateById('student_knowledge_mastery', existing.id, payload);
@@ -65,6 +78,7 @@ function getTrend(userId, kpCode, days) {
 
 module.exports = {
   getStatus,
+  calculateMastery,
   updateMastery,
   getTrend
 };
