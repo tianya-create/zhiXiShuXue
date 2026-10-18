@@ -1,4 +1,5 @@
 const db = require('../database/memory-db')
+const { expandKnowledgeIds } = require('./question-map')
 
 const GRAPH_NODES = [
   ['alg-1', '整式', '代数'], ['alg-2', '整式加减', '代数'], ['alg-3', '一元一次方程', '代数'], ['alg-4', '二元一次方程组', '代数'], ['alg-5', '一元二次方程', '代数'], ['alg-6', '一次函数', '代数'], ['alg-7', '反比例函数', '代数'], ['alg-8', '二次函数', '代数'],
@@ -196,12 +197,25 @@ function ensureManualQuestionBank() {
 
 function getQuestionBankByNode(filters = {}) {
   ensureManualQuestionBank()
+  // 教材树的知识点与早期题库编号不一一对应，这里按等价映射展开后再匹配，
+  // 避免新知识点（如 number-1、geometry-1）查不到任何题目。
+  const requested = filters.knowledgePointIds && filters.knowledgePointIds.length
+    ? filters.knowledgePointIds
+    : (filters.knowledgePointId ? [filters.knowledgePointId] : [])
+  const wanted = requested.length
+    ? new Set(requested.flatMap((id) => expandKnowledgeIds(id)))
+    : null
   return db.find('questions').filter(item => {
-    if (filters.knowledgePointId && item.knowledgePointId !== filters.knowledgePointId) return false
+    if (wanted) {
+      const own = [item.knowledgePointId, ...(Array.isArray(item.knowledgePoints) ? item.knowledgePoints : [])]
+      if (!own.some((id) => id && wanted.has(id))) return false
+    }
     if (filters.difficulty && Number(item.difficultyLevel) !== Number(filters.difficulty)) return false
     if (filters.type && item.type !== filters.type) return false
     if (filters.reviewStatus && item.reviewStatus !== filters.reviewStatus) return false
-    return item.source === 'manual-curated' || item.source === 'teacher-manual'
+    // 学生端刷题只取已审核的题：手工精选、教师录入、系统练习池
+    return ['manual-curated', 'teacher-manual', 'practice-seed', 'default'].includes(item.source)
+      || item.reviewStatus === 'approved'
   })
 }
 

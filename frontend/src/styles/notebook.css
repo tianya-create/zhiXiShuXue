@@ -1,0 +1,512 @@
+/* ============================================================
+   学生端、教师端主题：方格本 · 红笔批改
+   只在 <html class="theme-notebook"> 下生效（由 NotebookShell 挂载时添加、卸载时移除），
+   管理端不受影响。弹窗、消息框等挂在 body 上的元素同样会继承这套主题。
+
+   颜色分两套：鲜艳色（--nb-red 等）用来填色、描边、画记号；
+   深一档的 *-ink 色用来写字，保证在白底上看得清。
+   ============================================================ */
+
+html.theme-notebook {
+  /* 纸与墨 */
+  --nb-paper: #f3f7ff;
+  --nb-sheet: #ffffff;
+  --nb-grid: rgba(42, 85, 245, 0.08);
+  --nb-line: #d8e1f2;
+  --nb-line-strong: #bfcce6;
+  --nb-ink: #1a2140;
+  --nb-ink-2: #434e75;
+  --nb-ink-3: #6b7699;
+
+  /* 笔 */
+  --nb-blue: #2a55f5;
+  --nb-blue-dark: #1b3fcc;
+  --nb-blue-soft: #e7edff;
+  --nb-red: #f0443e;
+  --nb-red-ink: #d92d2b;
+  --nb-red-soft: #ffe9e8;
+  --nb-orange: #ff9500;
+  --nb-orange-ink: #c25e00;
+  --nb-orange-soft: #fff0da;
+  --nb-green: #13b57e;
+  --nb-green-ink: #0a8a5c;
+  --nb-green-soft: #ddf6ec;
+  --nb-yellow: #ffd43b;
+  --nb-purple: #7c4dff;
+  --nb-purple-soft: #efe9ff;
+  --nb-pink: #f2449b;
+  --nb-pink-soft: #ffe8f3;
+  --nb-teal: #00a7b5;
+  --nb-teal-soft: #ddf6f8;
+
+  /* 字 */
+  --nb-font-body: 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
+  --nb-font-display: 'ZCOOL QingKe HuangYou', var(--nb-font-body);
+  --nb-font-num: 'Bricolage Grotesque Variable', 'Bricolage Grotesque', var(--nb-font-body);
+  --nb-font-hand: 'Caveat', 'Segoe Print', cursive;
+
+  --nb-radius: 14px;
+  --nb-radius-sm: 10px;
+  --nb-shadow: 0 1px 0 var(--nb-line), 0 12px 26px -18px rgba(26, 33, 64, 0.35);
+
+  /* Element Plus 变量：文字用深一档的颜色 */
+  --el-color-primary: var(--nb-blue);
+  --el-color-primary-light-3: #6a88f8;
+  --el-color-primary-light-5: #95aafa;
+  --el-color-primary-light-7: #bfccfc;
+  --el-color-primary-light-8: #d4ddfd;
+  --el-color-primary-light-9: var(--nb-blue-soft);
+  --el-color-primary-dark-2: var(--nb-blue-dark);
+  --el-color-success: var(--nb-green-ink);
+  --el-color-success-light-3: #54ad8d;
+  --el-color-success-light-5: #85c5ae;
+  --el-color-success-light-7: #b6dcce;
+  --el-color-success-light-8: #cee8de;
+  --el-color-success-light-9: var(--nb-green-soft);
+  --el-color-success-dark-2: #086e4a;
+  --el-color-warning: var(--nb-orange-ink);
+  --el-color-warning-light-3: #d48e4d;
+  --el-color-warning-light-5: #e0ae80;
+  --el-color-warning-light-7: #edcfb3;
+  --el-color-warning-light-8: #f3dfcc;
+  --el-color-warning-light-9: var(--nb-orange-soft);
+  --el-color-warning-dark-2: #9b4b00;
+  --el-color-danger: var(--nb-red-ink);
+  --el-color-danger-light-3: #e46c6b;
+  --el-color-danger-light-5: #ec9695;
+  --el-color-danger-light-7: #f4c0bf;
+  --el-color-danger-light-8: #f7d5d5;
+  --el-color-danger-light-9: var(--nb-red-soft);
+  --el-color-danger-dark-2: #ae2422;
+  --el-text-color-primary: var(--nb-ink);
+  --el-text-color-regular: var(--nb-ink-2);
+  --el-text-color-secondary: var(--nb-ink-3);
+  --el-text-color-placeholder: #8e98b8;
+  --el-border-color: var(--nb-line-strong);
+  --el-border-color-light: var(--nb-line);
+  --el-border-color-lighter: var(--nb-line);
+  --el-fill-color-light: #eef3ff;
+  --el-fill-color-lighter: #f5f8ff;
+  --el-border-radius-base: var(--nb-radius-sm);
+  --el-font-family: var(--nb-font-body);
+  --el-box-shadow-light: 0 10px 28px -12px rgba(26, 33, 64, 0.3);
+
+  /* 字号：最小 13px，正文 15–16px */
+  --el-font-size-extra-large: 20px;
+  --el-font-size-large: 18px;
+  --el-font-size-medium: 16px;
+  --el-font-size-base: 15px;
+  --el-font-size-small: 14px;
+  --el-font-size-extra-small: 13px;
+  --el-component-size: 36px;
+  --el-component-size-large: 44px;
+  --el-component-size-small: 30px;
+
+  /* 旧主题变量也换掉，未单独改写的组件跟着变 */
+  --text-primary: var(--nb-ink);
+  --text-regular: var(--nb-ink-2);
+  --text-secondary: var(--nb-ink-3);
+  --text-muted: var(--nb-ink-3);
+  --border-default: var(--nb-line-strong);
+  --border-subtle: var(--nb-line);
+  --surface-base: var(--nb-paper);
+  --surface-raised: var(--nb-sheet);
+  --surface-overlay: var(--nb-sheet);
+  --surface-muted: #f3f6fb;
+  --primary-500: var(--nb-blue);
+  --brand-gradient: var(--nb-blue);
+  --brand-glow: none;
+}
+
+/* ---------- 纸面 ---------- */
+html.theme-notebook body {
+  font-size: 16px !important;
+  font-family: var(--nb-font-body) !important;
+  color: var(--nb-ink) !important;
+  background: var(--nb-paper) !important;
+}
+
+html.theme-notebook body::before {
+  display: none !important;
+}
+
+html.theme-notebook .app-background {
+  background-color: var(--nb-paper) !important;
+  background-image:
+    linear-gradient(var(--nb-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--nb-grid) 1px, transparent 1px);
+  background-size: 24px 24px !important;
+}
+
+html.theme-notebook :focus-visible {
+  outline: 2px solid var(--nb-blue) !important;
+  outline-offset: 2px !important;
+}
+
+/* ---------- 页面标题：荧光笔划过 ---------- */
+html.theme-notebook .page-header {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  padding: 4px 0 8px !important;
+  border-radius: 0 !important;
+  animation: none !important;
+  overflow: visible !important;
+}
+
+html.theme-notebook .page-header::before,
+html.theme-notebook .page-header::after {
+  display: none !important;
+}
+
+html.theme-notebook .page-header h2 {
+  display: inline !important;
+  font-family: var(--nb-font-display) !important;
+  font-weight: 400 !important;
+  font-size: 36px !important;
+  line-height: 1.25 !important;
+  letter-spacing: 0.02em !important;
+  color: var(--nb-ink) !important;
+  -webkit-text-fill-color: currentColor !important;
+  background: linear-gradient(transparent 58%, var(--nb-yellow) 58%, var(--nb-yellow) 90%, transparent 90%) !important;
+  padding: 0 4px !important;
+  margin: 0 -4px !important;
+  -webkit-box-decoration-break: clone !important;
+  box-decoration-break: clone !important;
+}
+
+html.theme-notebook .page-header p {
+  margin-top: 10px !important;
+  max-width: 60ch !important;
+  color: var(--nb-ink-2) !important;
+  font-size: 16px !important;
+  font-weight: 400 !important;
+  line-height: 1.7 !important;
+}
+
+/* ---------- 纸张（卡片） ---------- */
+html.theme-notebook .el-card {
+  background: var(--nb-sheet) !important;
+  border: 1px solid var(--nb-line) !important;
+  border-radius: var(--nb-radius) !important;
+  box-shadow: var(--nb-shadow) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  color: var(--nb-ink) !important;
+}
+
+html.theme-notebook .el-card:hover {
+  transform: none !important;
+  box-shadow: var(--nb-shadow) !important;
+  border-color: var(--nb-line) !important;
+}
+
+html.theme-notebook .el-card__header {
+  padding: 16px 20px !important;
+  border-bottom: 1px dashed var(--nb-line-strong) !important;
+  background: transparent !important;
+  font-weight: 700 !important;
+  color: var(--nb-ink) !important;
+}
+
+html.theme-notebook .el-card__body {
+  padding: 20px !important;
+}
+
+/* ---------- 按钮 ---------- */
+html.theme-notebook .el-button {
+  border-radius: var(--nb-radius-sm) !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+html.theme-notebook .el-button:not(.is-text):not(.is-link):active {
+  transform: translateY(1px) !important;
+}
+
+html.theme-notebook .el-button--primary:not(.is-plain):not(.is-link):not(.is-text) {
+  background: var(--nb-blue) !important;
+  border-color: var(--nb-blue) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 0 var(--nb-blue-dark) !important;
+}
+
+html.theme-notebook .el-button--primary:not(.is-plain):not(.is-link):not(.is-text):hover,
+html.theme-notebook .el-button--primary:not(.is-plain):not(.is-link):not(.is-text):focus-visible {
+  background: var(--nb-blue-dark) !important;
+  border-color: var(--nb-blue-dark) !important;
+  box-shadow: 0 2px 0 #13307f !important;
+  transform: none !important;
+}
+
+html.theme-notebook .el-button.is-link,
+html.theme-notebook .el-button.is-text {
+  box-shadow: none !important;
+}
+
+/* ---------- 输入框 ---------- */
+html.theme-notebook .el-input__wrapper,
+html.theme-notebook .el-select__wrapper,
+html.theme-notebook .el-textarea__inner {
+  background: var(--nb-sheet) !important;
+  border-radius: var(--nb-radius-sm) !important;
+  box-shadow: 0 0 0 1px var(--nb-line-strong) inset !important;
+}
+
+html.theme-notebook .el-input__wrapper.is-focus,
+html.theme-notebook .el-select__wrapper.is-focused,
+html.theme-notebook .el-textarea__inner:focus {
+  box-shadow: 0 0 0 2px var(--nb-blue) inset !important;
+}
+
+/* ---------- 标签 ---------- */
+html.theme-notebook .el-tag {
+  border-radius: 6px !important;
+  border: none !important;
+  font-weight: 600 !important;
+}
+
+html.theme-notebook .el-tag:hover {
+  transform: none !important;
+}
+
+/* ---------- 表格 ---------- */
+html.theme-notebook .el-table {
+  --el-table-header-bg-color: #f3f6fb;
+  --el-table-row-hover-bg-color: var(--nb-blue-soft);
+  --el-table-border-color: var(--nb-line);
+  border-radius: var(--nb-radius-sm) !important;
+  background: transparent !important;
+}
+
+html.theme-notebook .el-table th.el-table__cell {
+  background: #f3f6fb !important;
+  color: var(--nb-ink-2) !important;
+  font-weight: 700 !important;
+}
+
+html.theme-notebook .el-table td.el-table__cell {
+  color: var(--nb-ink) !important;
+}
+
+/* ---------- 弹窗 ---------- */
+html.theme-notebook .el-dialog,
+html.theme-notebook .el-message-box {
+  background: var(--nb-sheet) !important;
+  border-radius: 16px !important;
+  border: 1px solid var(--nb-line) !important;
+  box-shadow: 0 30px 60px -30px rgba(28, 37, 65, 0.45) !important;
+}
+
+html.theme-notebook .el-dialog__title,
+html.theme-notebook .el-message-box__title {
+  font-family: var(--nb-font-display) !important;
+  font-weight: 400 !important;
+  font-size: 22px !important;
+  color: var(--nb-ink) !important;
+}
+
+html.theme-notebook .el-dialog__header {
+  border-bottom: 1px dashed var(--nb-line-strong) !important;
+  margin-right: 0 !important;
+  padding-bottom: 14px !important;
+}
+
+/* ---------- 下拉菜单 ---------- */
+html.theme-notebook .el-dropdown-menu {
+  background: var(--nb-sheet) !important;
+  border: 1px solid var(--nb-line) !important;
+  border-radius: var(--nb-radius) !important;
+}
+
+html.theme-notebook .el-dropdown-menu__item:hover {
+  background: var(--nb-blue-soft) !important;
+  color: var(--nb-blue) !important;
+  transform: none !important;
+}
+
+/* ---------- 进度条、空状态 ---------- */
+html.theme-notebook .el-progress-bar__outer {
+  background: #edf1f7 !important;
+}
+
+html.theme-notebook .el-empty__description p {
+  color: var(--nb-ink-3) !important;
+}
+
+/* ---------- 统计卡（各页面共用的旧样式） ---------- */
+html.theme-notebook .stat-card {
+  background: var(--nb-sheet) !important;
+  border: 1px solid var(--nb-line) !important;
+  border-radius: var(--nb-radius) !important;
+  box-shadow: var(--nb-shadow) !important;
+  backdrop-filter: none !important;
+}
+
+html.theme-notebook .stat-card:hover {
+  transform: none !important;
+  box-shadow: var(--nb-shadow) !important;
+}
+
+html.theme-notebook .stat-card .stat-value {
+  font-family: var(--nb-font-num) !important;
+  font-weight: 700 !important;
+  color: var(--nb-ink) !important;
+  -webkit-text-fill-color: currentColor !important;
+  background: none !important;
+}
+
+html.theme-notebook .stat-card .stat-label {
+  color: var(--nb-ink-3) !important;
+}
+
+/* ---------- 覆盖全局样式里的链接按钮、表格行等 ---------- */
+html.theme-notebook .el-input__wrapper,
+html.theme-notebook .el-select__wrapper,
+html.theme-notebook .el-textarea__inner {
+  border: none !important;
+}
+
+html.theme-notebook .el-input__wrapper.is-focus {
+  transform: none !important;
+}
+
+html.theme-notebook .el-table td.el-table__cell {
+  border-bottom-color: var(--nb-line) !important;
+}
+
+html.theme-notebook .el-table__row:hover > td.el-table__cell {
+  background-color: var(--nb-blue-soft) !important;
+}
+
+html.theme-notebook .el-table .el-button.is-link {
+  border-color: transparent !important;
+  background: var(--nb-blue-soft) !important;
+  color: var(--nb-blue) !important;
+  border-radius: 6px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  box-shadow: none !important;
+}
+
+html.theme-notebook .el-table .el-button.is-link:hover,
+html.theme-notebook .el-table .el-button.is-link:focus-visible {
+  background: var(--nb-blue) !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+
+html.theme-notebook .el-button.is-link.el-button--primary {
+  color: var(--nb-blue) !important;
+}
+
+html.theme-notebook .el-button.is-link.el-button--danger {
+  color: var(--nb-red) !important;
+}
+
+html.theme-notebook .el-button.is-link.el-button--success {
+  color: var(--nb-green) !important;
+}
+
+html.theme-notebook .el-button.is-link.el-button--warning {
+  color: var(--nb-orange) !important;
+}
+
+html.theme-notebook .main-content,
+html.theme-notebook .layout-container {
+  background: transparent !important;
+}
+
+/* ---------- 字号：不出现过小的字 ---------- */
+html.theme-notebook .el-tag {
+  --el-tag-font-size: 13px;
+  height: auto !important;
+  min-height: 26px !important;
+  padding: 2px 10px !important;
+}
+
+html.theme-notebook .el-card__header {
+  font-size: 17px !important;
+}
+
+html.theme-notebook .el-table {
+  font-size: 15px !important;
+}
+
+html.theme-notebook .el-table th.el-table__cell {
+  font-size: 14px !important;
+}
+
+html.theme-notebook .el-table .el-button.is-link {
+  font-size: 14px !important;
+}
+
+html.theme-notebook .el-form-item__label,
+html.theme-notebook .el-radio__label,
+html.theme-notebook .el-checkbox__label,
+html.theme-notebook .el-select-dropdown__item,
+html.theme-notebook .el-dropdown-menu__item,
+html.theme-notebook .el-message-box__message,
+html.theme-notebook .el-dialog__body {
+  font-size: 15px !important;
+}
+
+html.theme-notebook .el-message {
+  border-radius: 12px !important;
+  font-size: 15px !important;
+}
+
+html.theme-notebook .el-empty__description p {
+  font-size: 15px !important;
+}
+
+html.theme-notebook .el-pagination {
+  --el-pagination-font-size: 14px;
+}
+
+/* ---------- 交互：可点的东西都有反馈 ---------- */
+html.theme-notebook .el-backtop {
+  width: 44px !important;
+  height: 44px !important;
+  border: 1px solid var(--nb-line) !important;
+  background: var(--nb-sheet) !important;
+  color: var(--nb-blue) !important;
+  box-shadow: var(--nb-shadow) !important;
+}
+
+html.theme-notebook .el-button:not(.is-link):not(.is-text):not(.el-button--primary):hover {
+  border-color: var(--nb-blue) !important;
+  color: var(--nb-blue) !important;
+  background: var(--nb-blue-soft) !important;
+}
+
+html.theme-notebook .el-radio-button__original-radio:checked + .el-radio-button__inner {
+  background: var(--nb-blue) !important;
+  border-color: var(--nb-blue) !important;
+  box-shadow: -1px 0 0 0 var(--nb-blue) !important;
+}
+
+/* ---------- 共用：数字、手写、状态色 ---------- */
+html.theme-notebook .nb-num {
+  font-family: var(--nb-font-num);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+html.theme-notebook .nb-hand {
+  font-family: var(--nb-font-hand);
+  color: var(--nb-red);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.theme-notebook *,
+  html.theme-notebook *::before,
+  html.theme-notebook *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -703,6 +703,30 @@ class Database {
     this.data = db;
   }
 
+  /**
+   * 确保集合存在。
+   * 行级 ACL、账号治理等新模块会访问一些历史库里可能还没建立的集合
+   * （如 uploadedFiles / drafts），统一在这里兜底，避免 undefined.filter 崩溃。
+   */
+  ensureCollection(collection) {
+    if (!(collection in this.data) || this.data[collection] === undefined) {
+      this.data[collection] = [];
+    }
+    return this.data[collection];
+  }
+
+  /**
+   * 事务：内存库本身不存在回滚语义，这里保证同批次写入按顺序落盘，
+   * 并在异常向上抛出时保持与调用方一致的行为。
+   */
+  transaction(fn) {
+    try {
+      return fn();
+    } catch (error) {
+      throw error;
+    }
+  }
+
   reloadQuestionsFromStore() {
     this.data.questions = getAllQuestions();
     return this.data.questions;
@@ -766,6 +790,7 @@ class Database {
 
   // 通用 CRUD 操作
   create(collection, item) {
+    this.ensureCollection(collection);
     const newItem = {
       ...item,
       id: item.id || uuidv4(),
@@ -778,22 +803,26 @@ class Database {
   }
 
   findById(collection, id) {
+    this.ensureCollection(collection);
     return this.data[collection].find(item => item.id === id);
   }
 
   find(collection, query = {}) {
+    this.ensureCollection(collection);
     return this.data[collection].filter(item => {
       return Object.keys(query).every(key => item[key] === query[key]);
     });
   }
 
   findOne(collection, query = {}) {
+    this.ensureCollection(collection);
     return this.data[collection].find(item => {
       return Object.keys(query).every(key => item[key] === query[key]);
     });
   }
 
   updateById(collection, id, updates) {
+    this.ensureCollection(collection);
     const index = this.data[collection].findIndex(item => item.id === id);
     if (index === -1) return null;
 
@@ -807,6 +836,7 @@ class Database {
   }
 
   deleteById(collection, id) {
+    this.ensureCollection(collection);
     const index = this.data[collection].findIndex(item => item.id === id);
     if (index === -1) return false;
 

@@ -10,22 +10,42 @@ const STATUS_COLORS = {
 const CURATED_NODE_IDS = sharedKnowledgeTree.categories.flatMap(category => category.nodes.map(node => node.id));
 const CURATED_NODE_SET = new Set(CURATED_NODE_IDS);
 const DEMO_GRAPH = sharedKnowledgeTree.categories.flatMap(category => category.nodes.map(node => ({
+  ...node,
   id: node.id,
   name: node.name,
+  categoryId: category.id,
+  categoryName: category.name,
   difficulty: node.difficulty,
   studyMinutes: node.studyMinutes,
   prerequisites: Array.isArray(node.prerequisites) ? node.prerequisites : [],
   dependencies: Array.isArray(node.dependencies) ? node.dependencies : [],
   domain: node.domain,
-  masterStatus: node.masterStatus
+  // 知识树本身不带初值状态，缺省按「待巩固」处理，避免颜色映射为 undefined
+  masterStatus: node.masterStatus || '待巩固'
 })));
 
+/**
+ * 知识树升级后（例如 18 → 30 个知识点）需要重建图谱节点，
+ * 否则旧库里的持久化数据会一直是上一版的节点集合。
+ * 掌握状态不存放在这里（由 student_knowledge_mastery 实时计算），因此重建是安全的。
+ */
 function ensureKnowledgeGraphDemoData() {
   if (!db.data.knowledgeGraphNodes) db.data.knowledgeGraphNodes = [];
   if (!db.data.knowledgeGraphWrong) db.data.knowledgeGraphWrong = [];
   if (!db.data.knowledgeGraphRecommend) db.data.knowledgeGraphRecommend = [];
-  if (!db.data.knowledgeGraphNodes.length) {
-    db.data.knowledgeGraphNodes = DEMO_GRAPH.map(item => ({ ...item, color: STATUS_COLORS[item.masterStatus] }));
+  const expectedIds = new Set(DEMO_GRAPH.map(item => item.id));
+  const current = db.data.knowledgeGraphNodes;
+  const sameShape = current.length === DEMO_GRAPH.length && current.every(item => expectedIds.has(item.id));
+  if (!sameShape) {
+    db.data.knowledgeGraphNodes = DEMO_GRAPH.map(item => ({
+      ...item,
+      color: STATUS_COLORS[item.masterStatus] || STATUS_COLORS['待巩固']
+    }));
+    try {
+      db.flushAll();
+    } catch (e) {
+      // 落盘失败不影响内存中的图谱数据
+    }
   }
 }
 

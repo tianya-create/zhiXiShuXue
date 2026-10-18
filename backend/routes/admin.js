@@ -75,7 +75,10 @@ router.put('/settings', (req, res) => {
 // 获取知识点列表
 router.get('/knowledge-points', (req, res) => {
   try {
-    const knowledgePoints = db.find('knowledgePoints');
+    // 只返回教材目录节点：早期题库遗留的 kp-xxx 章节不再混进知识点树
+    const knowledgePoints = db.find('knowledgePoints').filter(
+      (kp) => kp.curriculum || kp.isRoot || kp.isCategory
+    );
     
     // 构建树形结构
     const tree = [];
@@ -116,7 +119,9 @@ router.post('/knowledge-points', (req, res) => {
       parentId: parentId || null,
       level: level || 1,
       order: order || 1,
-      description: description || ''
+      description: description || '',
+      // 管理员手工新增的知识点同样属于教材目录，必须带标记才不会被树的过滤条件排除
+      curriculum: true
     });
     
     db.addLog(userId, 'CREATE_KNOWLEDGE_POINT', { kpId: kp.id, name });

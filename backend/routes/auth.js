@@ -6,40 +6,75 @@ const db = require('../database/memory-db');
 const { JWT_SECRET, JWT_EXPIRES_IN } = require('../config/auth-secret');
 
 // 用户登录
+// 登录失败限流：同一 IP + 账号 15 分钟内连续失败 10 次即锁定，抵御撞库
+const loginFailures = new Map();
+
+function failureState(key) {
+  const entry = loginFailures.get(key);
+  if (entry && entry.until < Date.now()) {
+    loginFailures.delete(key);
+    return null;
+  }
+  return entry || null;
+}
+
+function recordFailure(key) {
+  const entry = failureState(key);
+  loginFailures.set(key, {
+    count: entry ? entry.count + 1 : 1,
+    until: Date.now() + 15 * 60 * 1000
+  });
+  if (loginFailures.size > 5000) {
+    for (const [id, item] of loginFailures) {
+      if (item.until < Date.now()) loginFailures.delete(id);
+    }
+  }
+}
+
 router.post('/login', (req, res) => {
   try {
     const { username, password } = req.body;
-    
+
+    const key = `${req.ip}:${String(username || '')}`;
+    const state = failureState(key);
+    if (state && state.count >= 10) {
+      return res.status(429).json({ success: false, message: '登录尝试过多，请 15 分钟后再试' });
+    }
+
     if (!username || !password) {
       return res.status(400).json({
         success: false,
         message: '用户名和密码不能为空'
       });
     }
-    
+
     // 查找用户
     const user = db.findOne('users', { username });
-    
-    if (!user) {
+
+    if (!user || user.disabled) {
+      recordFailure(key);
       return res.status(401).json({
         success: false,
         message: '用户名或密码错误'
       });
     }
-    
+
     // 验证密码
     const isMatch = bcrypt.compareSync(password, user.password);
-    
+
     if (!isMatch) {
+      recordFailure(key);
       return res.status(401).json({
         success: false,
         message: '用户名或密码错误'
       });
     }
-    
-    // 生成 JWT token
+
+    loginFailures.delete(key);
+
+    // 生成 JWT token（带 tokenVersion：改密或禁用后旧令牌立即失效）
     const token = jwt.sign(
-      { userId: user.id, role: user.role },
+      { userId: user.id, role: user.role, tokenVersion: user.tokenVersion || 0 },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
@@ -78,8 +113,13 @@ router.post('/login', (req, res) => {
 // 用户退出登录
 router.post('/logout', (req, res) => {
   try {
-    const userId = req.headers['x-user-id'];
+    const userId = (req.user && req.user.id) || req.headers['x-user-id'];
     if (userId) {
+      const user = db.findById('users', userId);
+      // 递增 tokenVersion：退出后该令牌立即作废，避免被复制后继续使用
+      if (user) {
+        db.updateById('users', userId, { tokenVersion: (user.tokenVersion || 0) + 1 });
+      }
       db.addLog(userId, 'LOGOUT', { timestamp: new Date().toISOString() });
     }
     
@@ -129,15 +169,23 @@ router.post('/change-password', (req, res) => {
       });
     }
     
-    // 更新密码
+    if (String(newPassword).length < 8) {
+      return res.status(400).json({ success: false, message: '新密码至少需要 8 位' });
+    }
+
+    // 更新密码，并递增 tokenVersion —— 该账号此前签发的令牌全部失效
     const hashedPassword = bcrypt.hashSync(newPassword, 10);
-    db.updateById('users', userId, { password: hashedPassword });
+    db.updateById('users', userId, {
+      password: hashedPassword,
+      tokenVersion: (user.tokenVersion || 0) + 1
+    });
     
     db.addLog(userId, 'CHANGE_PASSWORD', { username: user.username });
     
     res.json({
       success: true,
-      message: '密码修改成功'
+      message: '密码修改成功，请使用新密码重新登录',
+      relogin: true
     });
   } catch (error) {
     res.status(500).json({

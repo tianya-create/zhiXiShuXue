@@ -29,6 +29,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 require('./database/migrate-questions-to-sqlite');
 initializeSmartLearningModels();
 seedDemoData();
+// 把 shared/knowledge-tree.json 的教材目录同步进库（知识点扩容后自动补齐）
+require('./services/curriculum-sync').syncCurriculum();
 
 // 启动数据（默认账号/演示数据）落盘，避免首次启动后重启丢失
 try {
@@ -40,20 +42,31 @@ try {
 }
 
 const { authMiddleware } = require('./middleware');
+const { privateResponse, teacherGuard } = require('./middleware/access');
 
 // 统一鉴权：校验 JWT 并把令牌身份写入 x-user-id（封堵伪造身份）
 app.use('/api', authMiddleware);
+
+// 行级 ACL 的第一层：响应脱敏 + 建立当前请求的操作者上下文
+// （放在鉴权之后、业务路由之前，确保每个响应都不会漏出密码哈希与密钥）
+app.use('/api', privateResponse);
+
+// 行级 ACL 的第二层：教师端的对象级越权拦截（防 IDOR）
+app.use('/api/teacher', teacherGuard);
 
 const authRoutes = require('./routes/auth');
 const teacherRoutes = require('./routes/teacher');
 const studentRoutes = require('./routes/student');
 const adminRoutes = require('./routes/admin');
+const accountRoutes = require('./routes/accounts');
 const aiTutorAdminRoutes = require('./routes/ai-tutor-admin');
 const commonRoutes = require('./routes/common');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/teacher', teacherRoutes);
 app.use('/api/student', studentRoutes);
+// 账号治理路由先挂载：其中 PUT/DELETE /users/:id 是 admin.js 同名接口的加强版
+app.use('/api/admin', accountRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/ai-tutor', aiTutorAdminRoutes);
 app.use('/api/common', commonRoutes);

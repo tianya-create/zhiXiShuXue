@@ -49,7 +49,9 @@ router.get('/recommend-q/:knowledgeId', (req, res) => {
 
 router.get('/knowledge-points', (req, res) => {
   try {
-    const knowledgePoints = db.find('knowledgePoints');
+    const knowledgePoints = db.find('knowledgePoints').filter(
+      (kp) => kp.curriculum || kp.isRoot || kp.isCategory
+    );
     const tree = [];
     const map = {};
     knowledgePoints.forEach(kp => { map[kp.id] = { ...kp, children: [] }; });
@@ -65,7 +67,10 @@ router.get('/knowledge-points', (req, res) => {
 
 router.get('/knowledge-points/flat', (req, res) => {
   try {
-    res.json({ success: true, data: db.find('knowledgePoints') });
+    res.json({
+      success: true,
+      data: db.find('knowledgePoints').filter((kp) => kp.curriculum || kp.isRoot || kp.isCategory)
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
