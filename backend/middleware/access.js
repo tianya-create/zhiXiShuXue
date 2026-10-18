@@ -183,6 +183,20 @@ function allowedRecord(collection, item, actor = scope.getStore()) {
 }
 
 /** 响应脱敏：任何接口都不会把密码哈希、密钥、令牌版本号返回给前端 */
+const SENSITIVE_KEYS = new Set([
+  'password',
+  'passwd',
+  'passwordHash',
+  'password_hash',
+  'oldPassword',
+  'confirmPassword',
+  'secret',
+  'clientSecret',
+  'apiKey',
+  'api_key',
+  'tokenVersion'
+]);
+
 function privateResponse(req, res, next) {
   const original = res.json.bind(res);
   const clean = (value) => {
@@ -195,7 +209,7 @@ function privateResponse(req, res, next) {
       Object.entries(value)
         .filter(
           ([key]) =>
-            !/password|passwd|secret|apiKey|api_key|tokenVersion/i.test(key) &&
+            !SENSITIVE_KEYS.has(key) &&
             !(req.user && req.user.role === 'student' && ['snapshot', 'questionSnapshots'].includes(key)),
         )
         .map(([key, item]) => [key, clean(item)]),
