@@ -1,9 +1,18 @@
 import { ref, watch, onBeforeUnmount, unref } from "vue";
 import api from "@/utils/api";
 
+// crypto.randomUUID 仅在安全上下文（https/localhost）可用，
+// 线上是 http 直连，必须降级为随机字符串，否则练习页直接报错。
+const newRequestId = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "req-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 12);
+};
+
 export function useAnswerDraft(key, answers, questions, images = ref([])) {
   const status = ref(""),
-    requestId = ref(crypto.randomUUID());
+    requestId = ref(newRequestId());
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const localKey = () => `answer-draft:${user.id}:${unref(key)}`;
   let timer,
@@ -75,7 +84,7 @@ export function useAnswerDraft(key, answers, questions, images = ref([])) {
       for (const [id, value] of Object.entries(data.answers || {}))
         if (validIds.has(id)) target[id] = value;
       images.value = data.images || [];
-      requestId.value = data.requestId || crypto.randomUUID();
+      requestId.value = data.requestId || newRequestId();
       status.value = "已恢复上次作答草稿";
     }
     active = true;
@@ -89,7 +98,7 @@ export function useAnswerDraft(key, answers, questions, images = ref([])) {
       await api.delete("/student/drafts/" + encodeURIComponent(unref(key)));
     } catch {}
     status.value = "已交卷";
-    requestId.value = crypto.randomUUID();
+    requestId.value = newRequestId();
   }
   watch(
     [() => unref(answers), images],

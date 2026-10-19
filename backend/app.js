@@ -33,6 +33,8 @@ app.use((req, res, next) => {
   if (
     ["POST", "PUT", "PATCH", "DELETE"].includes(req.method) &&
     req.headers.origin &&
+    req.headers.origin !== "http://" + req.headers.host &&
+    req.headers.origin !== "https://" + req.headers.host &&
     ![
       process.env.WEB_ORIGIN || "http://localhost:5000",
       "http://127.0.0.1:5000",
