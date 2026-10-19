@@ -80,6 +80,12 @@ function practiceQuestions(student, kp) {
 }
 function weak(student) {
   const eligible = new Set(eligibleNodes(student.id).map((node) => node.id));
+  // 错题统计只查一次，按知识点聚合；取题走缓存索引，避免 30 个节点逐个全表扫描
+  const wrongByKp = new Map();
+  for (const item of db.getAllMistakesForStudent(student.id)) {
+    if (item.isResolved) continue;
+    wrongByKp.set(item.kpCode, (wrongByKp.get(item.kpCode) || 0) + 1);
+  }
   return nodes.map((node) => {
     const state = getColorStatus(student.id, node.id);
     return {
@@ -94,9 +100,7 @@ function weak(student) {
       description: node.chapter,
       questionCount: getQuestionBankByNode({ knowledgePointId: node.id })
         .length,
-      wrongCount: db
-        .getAllMistakesForStudent(student.id)
-        .filter((item) => item.kpCode === node.id && !item.isResolved).length,
+      wrongCount: wrongByKp.get(node.id) || 0,
     };
   });
 }
@@ -319,17 +323,17 @@ router.get(
 );
 router.get(
   "/wrong-questions/stats",
-  run((req, res, student) =>
+  run((req, res, student) => {
+    const list = wrongs(student);
     res.json({
       success: true,
       data: {
-        questionBook: wrongs(student),
-        total: wrongs(student).length,
-        totalWrongQuestions: wrongs(student).filter((item) => !item.isResolved)
-          .length,
+        questionBook: list,
+        total: list.length,
+        totalWrongQuestions: list.filter((item) => !item.isResolved).length,
       },
-    }),
-  ),
+    });
+  }),
 );
 router.get(
   "/recommendations",

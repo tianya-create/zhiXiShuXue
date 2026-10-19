@@ -15,11 +15,19 @@ if (!db.data.settings.curriculumCatalogInitialized) {
     }
   db.data.settings.curriculumCatalogInitialized = true;
 }
+// nodes 原先每次属性访问都重新 db.find('knowledgePoints').filter(...)，
+// enrichQuestion 又对每道题调用 nodes.find —— 2000+ 道题 × 全表过滤直接拖慢所有学生端页面。
+// 这里按数据版本缓存目录节点列表，只有数据变化时才重建。
+let nodesCache = { version: -1, list: [] };
 const nodes = new Proxy([], {
   get(_target, key) {
-    const current = db
-      .find("knowledgePoints")
-      .filter((node) => node.curriculum);
+    if (nodesCache.version !== db.version) {
+      nodesCache = {
+        version: db.version,
+        list: db.find("knowledgePoints").filter((node) => node.curriculum),
+      };
+    }
+    const current = nodesCache.list;
     const value = current[key];
     return typeof value === "function" ? value.bind(current) : value;
   },

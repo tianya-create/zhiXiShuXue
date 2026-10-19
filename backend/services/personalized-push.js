@@ -32,19 +32,36 @@ function getPersonalizedPush(studentId, options = {}) {
     .map((node) => ({ ...node, ...getColorStatus(studentId, node.id) }))
     .sort((a, b) => (a.mastery ?? -1) - (b.mastery ?? -1));
   const now = Date.now();
-  const attempts = db.find("student_answer", { userId: studentId });
+  // 一次性取出该生的作答历史、复习计划与近 24h 推荐记录，避免逐题全表扫描
+  const attemptsByQuestion = new Map();
+  for (const item of db.find("student_answer", { userId: studentId })) {
+    const list = attemptsByQuestion.get(item.questionId) || [];
+    list.push(item);
+    attemptsByQuestion.set(item.questionId, list);
+  }
+  const scheduleByQuestion = new Map(
+    db
+      .find("studentQuestionAttempts", { studentId })
+      .map((item) => [item.questionId, item]),
+  );
+  const recentPushed = new Set(
+    db
+      .find("recommendationLogs")
+      .filter(
+        (log) =>
+          log.studentId === studentId &&
+          now - new Date(log.createdAt).getTime() < 86400000,
+      )
+      .flatMap((log) => log.questionIds || []),
+  );
   const questions = [];
   for (const node of ranked) {
     const pool = getQuestionBankByNode({ knowledgePointId: node.id })
       .filter((question) => {
-        const history = attempts
-          .filter((item) => item.questionId === question.id)
+        const history = (attemptsByQuestion.get(question.id) || [])
           .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         const latest = history[0];
-        const schedule = db.findOne("studentQuestionAttempts", {
-          studentId,
-          questionId: question.id,
-        });
+        const schedule = scheduleByQuestion.get(question.id);
         if (
           schedule?.nextReviewAt &&
           new Date(schedule.nextReviewAt).getTime() > now
@@ -56,14 +73,7 @@ function getPersonalizedPush(studentId, options = {}) {
           now - new Date(latest.createdAt).getTime() < 86400000
         )
           return false;
-        return !db
-          .find("recommendationLogs")
-          .some(
-            (log) =>
-              log.studentId === studentId &&
-              log.questionIds?.includes(question.id) &&
-              now - new Date(log.createdAt).getTime() < 86400000,
-          );
+        return !recentPushed.has(question.id);
       })
       .sort((a, b) => a.difficultyLevel - b.difficultyLevel);
     const prerequisites = (node.prerequisites || [])

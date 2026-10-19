@@ -293,6 +293,19 @@ html.theme-notebook .el-table td.el-table__cell {
 }
 
 /* ---------- 弹窗 ---------- */
+/* 固定侧栏时，弹窗遮罩与弹窗体只覆盖侧栏右侧的主内容区：
+   弹窗在主区域居中，不再被固定侧栏遮挡（小屏侧栏本来就隐藏，不生效） */
+html.nb-pinned {
+  --nb-pinned-offset: 248px;
+}
+
+@media (min-width: 1025px) {
+  html.nb-pinned .el-overlay,
+  html.nb-pinned .el-overlay .el-overlay-dialog {
+    left: var(--nb-pinned-offset);
+  }
+}
+
 html.theme-notebook .el-dialog,
 html.theme-notebook .el-message-box {
   background: var(--nb-sheet) !important;

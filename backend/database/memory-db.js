@@ -660,6 +660,7 @@ function initializeData() {
 // 数据库操作类
 class Database {
   constructor() {
+    this._version = 1;
     this.data = persistentData(db);
     this.data.questions = loadQuestionsFromStore([]);
     if (process.env.NODE_ENV === 'production' && this.data.users.some(user => !user.disabled && ['admin123', 'teacher123', 'student123', '123456'].some(password => bcrypt.compareSync(password, user.password)))) throw new Error('生产环境禁止默认密码，请使用独立 DATA_DIR 初始化，或先重设现有账号密码');
@@ -693,11 +694,22 @@ class Database {
       for (const [name, value] of Object.entries(data)) this.data[name] = value;
       getDatabase().prepare('DELETE FROM questions').run();
       this.data.questions.forEach(question => upsertQuestion(question));
+      this.touch();
     });
+  }
+
+  // 数据版本号：任何写操作自增，供上层做缓存失效判断
+  get version() {
+    return this._version;
+  }
+
+  touch() {
+    this._version += 1;
   }
 
   reloadQuestionsFromStore() {
     this.data.questions = getAllQuestions();
+    this.touch();
     return this.data.questions;
   }
 
@@ -729,6 +741,7 @@ class Database {
     };
     this.data[collection].push(newItem);
     this.persistCollection(collection, { item: newItem });
+    this.touch();
     return newItem;
   }
 
@@ -760,6 +773,7 @@ class Database {
       updatedAt: new Date().toISOString()
     };
     this.persistCollection(collection, { item: this.data[collection][index] });
+    this.touch();
     return this.data[collection][index];
   }
 
@@ -771,6 +785,7 @@ class Database {
     const removed = this.data[collection][index];
     this.data[collection].splice(index, 1);
     this.persistCollection(collection, { type: 'delete', id: removed.id });
+    this.touch();
     return true;
   }
 
@@ -780,6 +795,7 @@ class Database {
       return !Object.keys(query).every(key => item[key] === query[key]);
     });
     if (initialLength !== this.data[collection].length && collection === 'questions') replaceAllQuestions(this.data.questions);
+    if (initialLength !== this.data[collection].length) this.touch();
     return initialLength - this.data[collection].length;
   }
 

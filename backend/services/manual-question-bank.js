@@ -193,21 +193,49 @@ function ensureManualQuestionBank() {
   db.data.settings.questionBankInitialized = true;
 }
 
+// 题库倒排索引：按数据版本缓存，避免每个请求对 2000+ 道题反复全表扫描。
+// 这里只收 approved 题目（与原过滤条件一致），因此不需要逐条走行级权限判断。
+let indexVersion = -1
+let questionIndex = null
+function bankIndex() {
+  if (questionIndex && indexVersion === db.version) return questionIndex
+  const map = new Map()
+  for (const question of db.data.questions || []) {
+    if (question.reviewStatus !== 'approved') continue
+    const ids = new Set(
+      [question.knowledgePointId, ...(question.knowledgePoints || [])].filter(Boolean),
+    )
+    for (const id of ids) {
+      if (!map.has(id)) map.set(id, [])
+      map.get(id).push(question)
+    }
+  }
+  indexVersion = db.version
+  questionIndex = map
+  return map
+}
+
 function getQuestionBankByNode(filters = {}) {
   ensureManualQuestionBank()
   // 教材树节点（alg-1…）与早期题库编号（kp-001…/geo-3）并存，取题时按等价集合展开，
   // 否则 30 个目录节点里有一半会“点进去没有题”。
-  const targets = filters.knowledgePointId
-    ? new Set(expandKnowledgeIds(filters.knowledgePointId))
-    : null
-  return db.find('questions').filter(item => {
-    if (item.reviewStatus !== 'approved') return false;
-    if (targets && !targets.has(item.knowledgePointId) && !(item.knowledgePoints || []).some(id => targets.has(id))) return false
-    if (filters.difficulty && Number(item.difficultyLevel) !== Number(filters.difficulty)) return false
-    if (filters.type && item.type !== filters.type) return false
-    if (filters.reviewStatus && item.reviewStatus !== filters.reviewStatus) return false
-    return true
-  }).map(question => require('./curriculum').enrichQuestion(question))
+  const index = bankIndex()
+  const groups = filters.knowledgePointId
+    ? expandKnowledgeIds(filters.knowledgePointId).map(id => index.get(id) || [])
+    : [...index.values()]
+  const seen = new Set()
+  const result = []
+  for (const group of groups) {
+    for (const item of group) {
+      if (seen.has(item.id)) continue
+      seen.add(item.id)
+      if (filters.difficulty && Number(item.difficultyLevel) !== Number(filters.difficulty)) continue
+      if (filters.type && item.type !== filters.type) continue
+      if (filters.reviewStatus && item.reviewStatus !== filters.reviewStatus) continue
+      result.push(item)
+    }
+  }
+  return result.map(question => require('./curriculum').enrichQuestion(question))
 }
 
 module.exports = {

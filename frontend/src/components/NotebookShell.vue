@@ -256,6 +256,12 @@ watch(dropdownOpen, (visible) => {
   if (!visible) scheduleClose()
 })
 
+// 固定侧栏时在根元素上打标记，让弹窗（el-dialog / el-message-box）
+// 居中于侧栏右侧的主内容区，而不是整个视口（见 notebook.css 的 html.nb-pinned 规则）
+watch(pinned, (value) => {
+  document.documentElement.classList.toggle('nb-pinned', value)
+}, { immediate: true })
+
 function handleCommand(command) {
   if (command === 'profile') {
     router.push(props.profilePath)
@@ -290,6 +296,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.documentElement.classList.remove(THEME_CLASS)
+  document.documentElement.classList.remove('nb-pinned')
   clearTimeout(peekTimer)
   clearTimeout(closeTimer)
   if (removeBefore) removeBefore()

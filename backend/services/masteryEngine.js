@@ -18,7 +18,13 @@ function getKnowledgeAttempts(userId, kpCode) {
     .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 }
 
+// 掌握度按（用户, 知识点, 数据版本）缓存：学生端 weak-points 会连算 30+ 个知识点，
+// 不缓存时每个请求都要对答题记录做几十次全表过滤。
+let masteryCache = { key: null, value: null };
+
 function calculateMastery(userId, kpCode) {
+  const key = userId + '|' + kpCode + '|' + db.version;
+  if (masteryCache.key === key) return masteryCache.value;
   const attempts = getKnowledgeAttempts(userId, kpCode);
   const latest10 = attempts.slice(-10);
   const distinctQuestions = new Set(latest10.map(item => item.questionId)).size;
@@ -41,7 +47,7 @@ function calculateMastery(userId, kpCode) {
     mastery = Math.max(0, mastery - 10);
   }
 
-  return {
+  const result = {
     userId,
     kpCode,
     mastery: !sufficient && mastery !== null ? Math.min(79, mastery) : mastery,
@@ -52,6 +58,8 @@ function calculateMastery(userId, kpCode) {
     attemptCount: attempts.length,
     updatedAt: new Date().toISOString()
   };
+  masteryCache = { key, value: result };
+  return result;
 
 }
 
