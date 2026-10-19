@@ -2,7 +2,7 @@
   <div class="assignment-management">
     <div class="page-header">
       <h2>作业发布</h2>
-      <p>发布和管理作业任务</p>
+      <p>从题库或试卷里选题、设好截止时间，发给整个班级或部分学生。</p>
     </div>
     
     <el-card class="gradient-card">
@@ -17,7 +17,7 @@
       </template>
       
       <el-table :data="assignments" style="width: 100%" v-loading="loading">
-        <el-table-column prop="title" label="作业名称" />
+        <el-table-column prop="title" label="作业名称" min-width="140" />
         <el-table-column prop="paperTitle" label="试卷" width="180">
           <template #default="scope">
             {{ scope.row.paperTitle || (scope.row.questionCount ? '题库组卷' : '-') }}
@@ -55,7 +55,7 @@
     </el-card>
     
     <el-dialog v-model="dialogVisible" title="发布作业" width="760px">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="96px">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="120px">
         <el-form-item label="作业名称" prop="title">
           <el-input v-model="form.title" placeholder="请输入作业名称" />
         </el-form-item>
@@ -209,9 +209,7 @@
         </div>
       </div>
 
-      <div class="answer-question-content">
-        {{ item.content }}
-      </div>
+      <MathText class="answer-question-content" tag="div" :text="item.content" />
 
       <div
         v-if="item.options && item.options.length"
@@ -222,7 +220,7 @@
           :key="index"
           class="answer-option-item"
         >
-          {{ String.fromCharCode(65 + index) }}. {{ option }}
+          {{ String.fromCharCode(65 + index) }}. <MathText :text="option" />
         </div>
       </div>
 
@@ -251,6 +249,7 @@
 </template>
 
 <script setup>
+import MathText from '@/components/MathText.vue'
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
@@ -501,8 +500,8 @@ function formatDate(date) {
 
 .selected-question-summary {
   margin-top: 8px;
-  color: #909399;
-  font-size: 12px;
+  color: var(--nb-ink-3);
+  font-size: 14px;
 }
 
 .question-filter-panel {
@@ -527,7 +526,7 @@ function formatDate(date) {
 }
 
 .answer-question-card {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--nb-line);
   border-radius: 16px;
   padding: 16px;
   background: linear-gradient(135deg, #ffffff, #f8fbff);
@@ -550,12 +549,12 @@ function formatDate(date) {
 
 .answer-question-score {
   font-weight: 700;
-  color: #2563eb;
+  color: var(--nb-blue);
 }
 
 .answer-question-content {
   margin-top: 12px;
-  color: #111827;
+  color: var(--nb-ink);
   font-size: 15px;
   line-height: 1.8;
 }
@@ -569,22 +568,22 @@ function formatDate(date) {
 .answer-option-item {
   padding: 10px 12px;
   border-radius: 10px;
-  background: #f8fafc;
-  color: #374151;
+  background: #f5f8ff;
+  color: var(--nb-ink-2);
 }
 
 .answer-meta-list {
   margin-top: 14px;
   display: grid;
   gap: 8px;
-  color: #4b5563;
+  color: var(--nb-ink-2);
 }
 
 .teacher-comment {
   margin-top: 10px;
   padding: 10px 12px;
   border-radius: 10px;
-  background: #f9fafb;
-  color: #374151;
+  background: #f5f8ff;
+  color: var(--nb-ink-2);
 }
 </style>

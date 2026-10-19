@@ -2,7 +2,7 @@
   <div class="learning-track-page">
     <div class="page-header">
       <h2>学习轨迹</h2>
-      <p>串联作业记录与练习记录，看见正确率与掌握度的变化</p>
+      <p>每次作业和练习都记在这里，看看正确率和掌握度是怎么变化的。</p>
     </div>
 
     <el-card class="gradient-card summary-card">
@@ -21,7 +21,7 @@
         </div>
         <div class="summary-item">
           <span class="summary-label">平均正确率</span>
-          <strong>{{ stats.averageCorrectRate }}%</strong>
+          <strong>{{ stats.averageCorrectRate === null ? '尚无已判定记录' : stats.averageCorrectRate + '%' }}</strong>
         </div>
       </div>
     </el-card>
@@ -108,7 +108,7 @@
                 </div>
                 <div class="detail-stat-item">
                   <div class="label">耗时</div>
-                  <div class="value">{{ detailData.duration }}min</div>
+                  <div class="value">{{ detailData.duration === null ? '未记录' : detailData.duration + 'min' }}</div>
                 </div>
               </div>
               <div class="radar-title">知识点掌握分布</div>
@@ -126,10 +126,10 @@
                       {{ q.isCorrect ? '正确' : '错误' }}
                     </el-tag>
                   </div>
-                  <div class="q-content">{{ q.content }}</div>
+                  <MathText class="q-content" tag="div" :text="q.content" />
                   <div class="q-ans-box">
-                    <div>你的答案：<span :class="q.isCorrect ? 'correct' : 'wrong'">{{ q.userAnswer || '未填' }}</span></div>
-                    <div>正确答案：<span class="correct">{{ q.answer }}</span></div>
+                    <div>你的答案：<MathText :class="q.isCorrect ? 'correct' : 'wrong'" :text="q.userAnswer || '未填'" /></div>
+                    <div>正确答案：<MathText class="correct" :text="q.answer" /></div>
                   </div>
                 </div>
               </el-scrollbar>
@@ -142,11 +142,17 @@
 </template>
 
 <script setup>
+import { NB } from '@/utils/notebook-colors'
+
+const CHART_COLORS = { brand: NB.blue, brandAlt: NB.orange, axis: NB.ink3 }
+import MathText from '@/components/MathText.vue'
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '@/utils/api'
 import dayjs from 'dayjs'
 import * as echarts from 'echarts'
+import { NB_ECHARTS_THEME, registerNotebookChartTheme } from '@/utils/notebook-colors'
+registerNotebookChartTheme(echarts)
 
 const loading = ref(false)
 const trackList = ref([])
@@ -204,12 +210,12 @@ function renderCombinedChart() {
   const chartDom = document.getElementById('combinedChart')
   if (!chartDom) return
   if (combinedChart) combinedChart.dispose()
-  combinedChart = echarts.init(chartDom)
+  combinedChart = echarts.init(chartDom, NB_ECHARTS_THEME)
 
   const data = filteredTrackList.value
   const xData = data.map(item => dayjs(item.date).format('MM-DD'))
   const rateData = data.map(item => item.correctRate || 0)
-  const masteryData = data.map(item => item.masteryAfter || 0)
+  const masteryData = data.map(item => item.masteryAfter ?? null)
 
   combinedChart.setOption({
     tooltip: {
@@ -241,7 +247,7 @@ function renderCombinedChart() {
       },
       {
         type: 'value',
-        name: '掌握度',
+        name: '参考掌握度',
         min: 0,
         max: 100,
         axisLabel: { formatter: '{value}%' },
@@ -258,11 +264,11 @@ function renderCombinedChart() {
         type: 'line',
         smooth: true,
         data: rateData,
-        itemStyle: { color: '#409EFF' },
+        itemStyle: { color: CHART_COLORS.brand },
         areaStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(64,158,255,0.3)' },
-            { offset: 1, color: 'rgba(64,158,255,0)' }
+            { offset: 0, color: 'rgba(35,80,216,0.22)' },
+            { offset: 1, color: 'rgba(35,80,216,0)' }
           ])
         }
       },
@@ -272,7 +278,7 @@ function renderCombinedChart() {
         yAxisIndex: 1,
         smooth: true,
         data: masteryData,
-        itemStyle: { color: '#67C23A' },
+        itemStyle: { color: CHART_COLORS.brandAlt },
         lineStyle: { width: 3, type: 'dashed' }
       }
     ]
@@ -311,7 +317,7 @@ function renderRadarChart() {
   const chartDom = document.getElementById('radarChart')
   if (!chartDom) return
   if (radarChart) radarChart.dispose()
-  radarChart = echarts.init(chartDom)
+  radarChart = echarts.init(chartDom, NB_ECHARTS_THEME)
 
   const indicator = detailData.value.radarData.map(d => ({ name: d.name, max: 100 }))
   const values = detailData.value.radarData.map(d => d.value)
@@ -321,22 +327,22 @@ function renderRadarChart() {
       indicator,
       radius: '65%',
       splitNumber: 4,
-      axisName: { color: '#666' }
+      axisName: { color: CHART_COLORS.axis }
     },
     series: [{
       type: 'radar',
       data: [{
         value: values,
         name: '掌握度',
-        areaStyle: { color: 'rgba(103, 194, 58, 0.4)' },
-        itemStyle: { color: '#67C23A' }
+        areaStyle: { color: 'rgba(232, 137, 12, 0.22)' },
+        itemStyle: { color: CHART_COLORS.brandAlt }
       }]
     }]
   })
 }
 
 function getStatusText(status) {
-  const map = { graded: '已完成', submitted: '待批改', completed: '已掌握' }
+  const map = { graded: '已完成', submitted: '待批改', completed: '已完成', pending_review: '等待复核' }
   return map[status] || status || '-'
 }
 
@@ -355,15 +361,14 @@ function formatDate(date) {
 .summary-item {
   padding: 18px;
   border-radius: 12px;
-  background: rgba(255,255,255,0.4);
-  backdrop-filter: blur(4px);
+  background: #f8fafd;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
 }
-.summary-item strong { font-size: 24px; color: #1e293b; }
-.summary-label { color: #64748b; font-size: 14px; }
+.summary-item strong { font-family: var(--nb-font-num); font-size: 28px; color: var(--nb-ink); }
+.summary-label { color: var(--nb-ink-3); font-size: 14px; }
 
 .chart-main-card { margin-bottom: 20px; }
 .chart-header { display: flex; justify-content: space-between; align-items: center; }
@@ -372,7 +377,7 @@ function formatDate(date) {
 
 .track-card {
   padding: 16px;
-  background: #f8fafc;
+  background: #f8fafd;
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.3s;
@@ -380,15 +385,14 @@ function formatDate(date) {
 }
 .track-card:hover {
   background: #fff;
-  border-color: #409EFF;
+  border-color: var(--nb-blue);
   box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-  transform: translateY(-2px);
 }
 
 .track-head { display: flex; justify-content: space-between; }
-.track-title { font-size: 16px; font-weight: 700; color: #1e293b; }
-.track-subtitle { font-size: 13px; color: #64748b; margin-top: 2px; }
-.track-meta { margin-top: 12px; display: flex; gap: 20px; color: #64748b; font-size: 13px; }
+.track-title { font-size: 16px; font-weight: 700; color: var(--nb-ink); }
+.track-subtitle { font-size: 14px; color: var(--nb-ink-3); margin-top: 2px; }
+.track-meta { margin-top: 12px; display: flex; gap: 20px; color: var(--nb-ink-3); font-size: 14px; }
 
 .detail-stat-row {
   display: grid;
@@ -399,31 +403,31 @@ function formatDate(date) {
 .detail-stat-item {
   text-align: center;
   padding: 10px;
-  background: #f0f9eb;
+  background: var(--nb-green-soft);
   border-radius: 8px;
 }
-.detail-stat-item .label { font-size: 12px; color: #67c23a; }
-.detail-stat-item .value { font-size: 18px; font-weight: bold; color: #1e293b; }
+.detail-stat-item .label { font-size: 14px; color: var(--nb-green-ink); }
+.detail-stat-item .value { font-size: 18px; font-weight: bold; color: var(--nb-ink); }
 
 .radar-title { font-weight: bold; margin: 15px 0 10px; text-align: center; }
-.section-title { font-weight: bold; margin-bottom: 15px; padding-left: 10px; border-left: 4px solid #409eff; }
+.section-title { font-weight: bold; margin-bottom: 15px; padding-left: 10px; border-left: 4px solid var(--nb-blue); }
 
 .q-detail-item {
   padding: 12px;
-  background: #f8fafc;
+  background: #f8fafd;
   border-radius: 8px;
   margin-bottom: 12px;
 }
 .q-head { display: flex; justify-content: space-between; margin-bottom: 8px; }
-.q-idx { font-weight: bold; color: #64748b; }
+.q-idx { font-weight: bold; color: var(--nb-ink-3); }
 .q-content { font-size: 14px; line-height: 1.6; margin-bottom: 10px; }
 .q-ans-box {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  font-size: 13px;
+  font-size: 14px;
   padding-top: 8px;
-  border-top: 1px dashed #e2e8f0;
+  border-top: 1px dashed var(--nb-line-strong);
 }
-.correct { color: #67c23a; font-weight: bold; }
-.wrong { color: #f56c6c; font-weight: bold; }
+.correct { color: var(--nb-green-ink); font-weight: bold; }
+.wrong { color: var(--nb-red-ink); font-weight: bold; }
 </style>

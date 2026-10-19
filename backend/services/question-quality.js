@@ -1,17 +1,5 @@
 const db = require("../database/memory-db");
 const { enrichQuestion, nodes } = require("./curriculum");
-const { expandKnowledgeIds } = require("./question-map");
-
-/** 老题库的 kp-xxx 编号先按等价关系归一到教材节点，避免新增校验把历史题目挡在门外 */
-function resolveNodeId(id) {
-  const key = String(id || "").trim();
-  if (!key) return "";
-  if (nodes.some((node) => node.id === key)) return key;
-  const alias = expandKnowledgeIds(key).find((item) =>
-    nodes.some((node) => node.id === item),
-  );
-  return alias || "";
-}
 function normalizeQuestion(input, existing = {}, actor) {
   const question = enrichQuestion({ ...existing, ...input });
   question.type =
@@ -36,7 +24,7 @@ function normalizeQuestion(input, existing = {}, actor) {
   question.hints = Array.isArray(question.hints)
     ? question.hints.map(String).slice(0, 5)
     : [];
-  // 显式传 0 要按 0 处理（后面会被分值校验拒绝），不能被 || 吞成默认 5 分
+  // 显式传 0 时不能被 || 吞成 5，否则「分值越界」永远校验不到
   question.score =
     question.score === undefined || question.score === null || question.score === ""
       ? 5
@@ -50,15 +38,8 @@ function normalizeQuestion(input, existing = {}, actor) {
     !["choice", "fill", "subjective", "judge"].includes(question.type)
   )
     throw new Error("请填写有效题型、题干和答案");
-  const resolvedNodeId = resolveNodeId(
-    question.knowledgePointId || question.knowledgePoints?.[0],
-  );
-  // 新建题目必须落到教材目录；历史题目可能没有知识点，允许在编辑时补齐而不阻断保存
-  if (!resolvedNodeId && !existing.id) throw new Error("请选择课程目录中的知识点");
-  if (resolvedNodeId) {
-    question.knowledgePointId = resolvedNodeId;
-    question.knowledgePoints = [resolvedNodeId];
-  }
+  if (!nodes.some((node) => node.id === question.knowledgePointId))
+    throw new Error("请选择课程目录中的知识点");
   if (
     !Number.isFinite(question.score) ||
     question.score <= 0 ||

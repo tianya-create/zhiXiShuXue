@@ -2,14 +2,14 @@
   <div class="profile-page">
     <div class="page-header">
       <h2>个人设置</h2>
-      <p>管理您的个人信息和账号设置</p>
+      <p>修改姓名、联系方式和登录密码。</p>
     </div>
     
     <el-row :gutter="20">
       <el-col :span="12">
         <el-card class="gradient-card">
           <template #header>基本信息</template>
-          <el-form ref="infoFormRef" :model="infoForm" label-width="80px">
+          <el-form ref="infoFormRef" :model="infoForm" label-width="104px">
             <el-form-item label="用户名">
               <el-input v-model="infoForm.username" disabled />
             </el-form-item>
@@ -32,7 +32,7 @@
       <el-col :span="12">
         <el-card class="gradient-card">
           <template #header>修改密码</template>
-          <el-form ref="pwdFormRef" :model="pwdForm" :rules="pwdRules" label-width="80px">
+          <el-form ref="pwdFormRef" :model="pwdForm" :rules="pwdRules" label-width="104px">
             <el-form-item label="原密码" prop="oldPassword">
               <el-input v-model="pwdForm.oldPassword" type="password" show-password />
             </el-form-item>

@@ -23,10 +23,17 @@ const { gradeQuestions, synchronize, reviewRecord } = require('../services/learn
 const actor = { id: 'teacher-test', role: 'teacher' };
 const admin = { id: 'admin-test', role: 'admin' };
 
+// 目录节点在 require 时已由 curriculum 初始化，这里只补缺失的，避免重复编号报错
+function ensure(collection, item) {
+  if (db.findById(collection, item.id)) return;
+  if (collection === 'users' && db.data.users.some((u) => u.username === item.username)) return;
+  db.create(collection, item);
+}
+
 beforeAll(() => {
   for (const category of tree.categories) {
     for (const node of category.nodes) {
-      db.create('knowledgePoints', {
+      ensure('knowledgePoints', {
         ...node,
         curriculum: true,
         parentId: category.id,
@@ -36,16 +43,17 @@ beforeAll(() => {
       });
     }
   }
-  db.create('users', { id: 'student-user-1', username: 'stu1', role: 'student', name: '测试学生' });
-  db.create('classes', { id: 'class-1', name: '七年级一班', grade: '七年级', teacherId: 'teacher-test' });
-  db.create('students', {
+  ensure('users', { id: 'student-user-1', username: 'stu1', role: 'student', name: '测试学生' });
+  ensure('users', { id: 'teacher-user-1', username: 'teacher-test', role: 'teacher', name: '测试教师' });
+  ensure('classes', { id: 'class-1', name: '七年级一班', grade: '七年级', teacherId: 'teacher-test' });
+  ensure('students', {
     id: 'student-1',
     userId: 'student-user-1',
     name: '测试学生',
     studentNo: 'S001',
     classId: 'class-1'
   });
-  db.create('teachers', { id: 'teacher-test', name: '测试教师', userId: 'teacher-user-1' });
+  ensure('teachers', { id: 'teacher-test', name: '测试教师', userId: 'teacher-user-1' });
 });
 
 afterAll(() => {

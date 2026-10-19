@@ -1,65 +1,57 @@
 <template>
-  <div class="teacher-dashboard">
-    <!-- 页面头部 -->
-    <header class="page-header">
-      <div class="header-content">
-        <div class="header-text">
-          <h2>教师工作台</h2>
-          <p>欢迎使用智析数学，今天是 {{ currentDate }}</p>
-        </div>
-      </div>
+  <div class="t-dashboard">
+    <header class="greeting">
+      <p class="greeting-date">{{ currentDate }}</p>
+      <h1 class="greeting-title">{{ teacherName }}，{{ greetingWord }}</h1>
     </header>
 
-    <!-- 统计卡片 -->
-    <section class="stats-grid">
-      <div class="stat-card is-gradient">
-        <div class="stat-icon">
-          <el-icon :size="22"><User /></el-icon>
+    <section class="today">
+      <div class="today-label">今天先做这一件</div>
+      <div class="today-body">
+        <div class="today-text">
+          <p class="today-main">{{ nextStep.title }}</p>
+          <p class="today-sub">{{ nextStep.detail }}</p>
         </div>
-        <div class="stat-value">{{ stats.studentCount }}</div>
-        <div class="stat-label">学生总数</div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon" style="background: var(--info-bg); color: var(--info-500);">
-          <el-icon :size="22"><Document /></el-icon>
-        </div>
-        <div class="stat-value">{{ stats.paperCount }}</div>
-        <div class="stat-label">试卷总数</div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon" style="background: var(--danger-bg); color: var(--danger-500);">
-          <el-icon :size="22"><Edit /></el-icon>
-        </div>
-        <div class="stat-value">{{ stats.pendingCount }}</div>
-        <div class="stat-label">待批改</div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon" style="background: var(--success-bg); color: var(--success-500);">
-          <el-icon :size="22"><TrendCharts /></el-icon>
-        </div>
-        <div class="stat-value">{{ stats.avgScore }}%</div>
-        <div class="stat-label">平均正确率</div>
+        <el-button type="primary" size="large" @click="nextStep.action()">{{ nextStep.button }}</el-button>
       </div>
     </section>
 
-    <!-- 主内容区 -->
-    <div class="dashboard-layout">
-      <!-- 最近作业 -->
+    <section class="stat-row">
+      <button type="button" class="stat-tile" style="--tile: var(--nb-blue); --tile-soft: var(--nb-blue-soft)" @click="goTo('/teacher/students')">
+        <span class="stat-icon"><el-icon><User /></el-icon></span>
+        <span class="stat-num nb-num">{{ stats.studentCount }}</span>
+        <span class="stat-name">名学生</span>
+      </button>
+      <button type="button" class="stat-tile" style="--tile: var(--nb-purple); --tile-soft: var(--nb-purple-soft)" @click="goTo('/teacher/papers')">
+        <span class="stat-icon"><el-icon><Document /></el-icon></span>
+        <span class="stat-num nb-num">{{ stats.paperCount }}</span>
+        <span class="stat-name">份试卷</span>
+      </button>
+      <button type="button" class="stat-tile" style="--tile: var(--nb-red); --tile-soft: var(--nb-red-soft)" @click="goTo('/teacher/grading')">
+        <span class="stat-icon"><el-icon><EditPen /></el-icon></span>
+        <span class="stat-num nb-num">{{ stats.pendingCount }}</span>
+        <span class="stat-name">份待批改</span>
+      </button>
+      <button type="button" class="stat-tile" style="--tile: var(--nb-green); --tile-soft: var(--nb-green-soft)" @click="goTo('/teacher/analytics/class')">
+        <span class="stat-icon"><el-icon><TrendCharts /></el-icon></span>
+        <span class="stat-num nb-num">{{ stats.avgScore === null ? '-' : stats.avgScore }}</span>
+        <span class="stat-name">已批改答卷平均分</span>
+      </button>
+    </section>
+
+    <div class="board">
       <el-card class="panel-card">
         <template #header>
           <div class="section-header">
-            <div class="section-title">最近作业</div>
-            <el-button type="primary" link @click="goToAssignments">查看全部</el-button>
+            <span class="section-title">最近作业</span>
+            <el-button type="primary" link @click="goTo('/teacher/assignments')">全部作业</el-button>
           </div>
         </template>
-        <el-table :data="recentAssignments" style="width: 100%">
-          <el-table-column prop="title" label="作业名称" />
-          <el-table-column prop="className" label="班级" width="120" />
-          <el-table-column prop="submittedCount" label="已提交" width="80" />
-          <el-table-column prop="status" label="状态" width="100">
+        <el-table :data="recentAssignments" style="width: 100%" empty-text="还没有发布作业">
+          <el-table-column prop="title" label="作业名称" min-width="140" />
+          <el-table-column prop="className" label="班级" min-width="110" />
+          <el-table-column prop="submittedCount" label="已交" width="76" />
+          <el-table-column label="状态" width="96">
             <template #default="scope">
               <el-tag :type="scope.row.status === 'published' ? 'success' : 'info'">
                 {{ scope.row.status === 'published' ? '进行中' : '已结束' }}
@@ -69,51 +61,37 @@
         </el-table>
       </el-card>
 
-      <!-- 班级概览 -->
       <el-card class="panel-card">
         <template #header>
           <div class="section-header">
-            <div class="section-title">班级概览</div>
-            <el-button type="primary" link @click="goToClasses">查看全部</el-button>
+            <span class="section-title">我的班级</span>
+            <el-button type="primary" link @click="goTo('/teacher/classes')">班级管理</el-button>
           </div>
         </template>
-        <el-table :data="classes" style="width: 100%">
-          <el-table-column prop="name" label="班级名称" />
-          <el-table-column prop="grade" label="年级" width="100" />
-          <el-table-column prop="studentCount" label="学生数" width="80" />
-          <el-table-column label="操作" width="100">
+        <el-table :data="classes" style="width: 100%" empty-text="还没有班级">
+          <el-table-column prop="name" label="班级" min-width="120" />
+          <el-table-column prop="studentCount" label="人数" width="76" />
+          <el-table-column label="" width="110">
             <template #default="scope">
-              <el-button type="primary" link @click="viewClassAnalytics(scope.row.id)">学情</el-button>
+              <el-button type="primary" link @click="viewClassAnalytics(scope.row.id)">看学情</el-button>
             </template>
           </el-table-column>
         </el-table>
       </el-card>
     </div>
 
-    <!-- 快捷操作 -->
-    <el-card class="panel-card">
-      <template #header>
-        <div class="section-title">快捷操作</div>
-      </template>
-      <div class="quick-actions">
-        <el-button type="primary" size="large" @click="goToPapers">
-          <el-icon><Upload /></el-icon>
-          上传试卷
-        </el-button>
-        <el-button type="success" size="large" @click="goToAssignments">
-          <el-icon><Document /></el-icon>
-          发布作业
-        </el-button>
-        <el-button type="warning" size="large" @click="goToGrading">
-          <el-icon><Edit /></el-icon>
-          批改作业
-        </el-button>
-        <el-button type="info" size="large" @click="goToAnalytics">
-          <el-icon><TrendCharts /></el-icon>
-          学情分析
-        </el-button>
+    <section class="quick">
+      <h2 class="quick-title">常用操作</h2>
+      <div class="quick-grid">
+        <button v-for="item in quickActions" :key="item.label" type="button" class="quick-tile" :style="{ '--tile': item.color, '--tile-soft': item.soft }" @click="goTo(item.path)">
+          <span class="quick-icon"><el-icon><component :is="item.icon" /></el-icon></span>
+          <span class="quick-text">
+            <span class="quick-label">{{ item.label }}</span>
+            <span class="quick-desc">{{ item.desc }}</span>
+          </span>
+        </button>
       </div>
-    </el-card>
+    </section>
   </div>
 </template>
 
@@ -125,27 +103,63 @@ import dayjs from 'dayjs'
 
 const router = useRouter()
 
-const currentDate = computed(() => dayjs().format('YYYY年MM月DD日 dddd'))
+const currentDate = computed(() => dayjs().format('M月D日 dddd'))
+const greetingWord = computed(() => {
+  const hour = dayjs().hour()
+  if (hour < 11) return '早上好'
+  if (hour < 14) return '中午好'
+  if (hour < 18) return '下午好'
+  return '晚上好'
+})
+const teacherName = computed(() => {
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    return user.name || '老师'
+  } catch (e) {
+    return '老师'
+  }
+})
 
 const stats = ref({
   studentCount: 0,
   paperCount: 0,
   pendingCount: 0,
-  avgScore: 0
+  avgScore: null
 })
 
 const recentAssignments = ref([])
 const classes = ref([])
 
+const quickActions = [
+  { label: '上传试卷', desc: '把纸质卷或题目录进来', icon: 'Upload', path: '/teacher/papers', color: 'var(--nb-blue)', soft: 'var(--nb-blue-soft)' },
+  { label: '发布作业', desc: '选题目、定截止时间', icon: 'Promotion', path: '/teacher/assignments', color: 'var(--nb-purple)', soft: 'var(--nb-purple-soft)' },
+  { label: '批改作业', desc: '主观题需要人工批改', icon: 'EditPen', path: '/teacher/grading', color: 'var(--nb-pink)', soft: 'var(--nb-pink-soft)' },
+  { label: '看班级学情', desc: '哪些知识点全班都弱', icon: 'TrendCharts', path: '/teacher/analytics/class', color: 'var(--nb-teal)', soft: 'var(--nb-teal-soft)' }
+]
+
+// 首页只给一个明确的下一步：有待批改的先批改
+const nextStep = computed(() => {
+  if (stats.value.pendingCount > 0) {
+    return {
+      title: `有 ${stats.value.pendingCount} 份作业等你批改`,
+      detail: '主观题要老师批改后，学生才能看到分数，薄弱知识点也会随之更新。',
+      button: '去批改',
+      action: () => goTo('/teacher/grading')
+    }
+  }
+  return {
+    title: '作业都批改完了',
+    detail: '看看班级学情，找出全班都没掌握的知识点，再针对性地布置一份作业。',
+    button: '看班级学情',
+    action: () => goTo('/teacher/analytics/class')
+  }
+})
+
 onMounted(() => {
   loadData()
 })
 
-function goToAssignments() { router.push('/teacher/assignments') }
-function goToClasses() { router.push('/teacher/classes') }
-function goToPapers() { router.push('/teacher/papers') }
-function goToGrading() { router.push('/teacher/grading') }
-function goToAnalytics() { router.push('/teacher/analytics/class') }
+function goTo(path) { router.push(path) }
 
 function viewClassAnalytics(classId) {
   router.push('/teacher/analytics/class?classId=' + classId)
@@ -157,7 +171,7 @@ function loadData() {
       classes.value = classRes.data
       let total = 0
       for (let c of classRes.data) {
-        if (c.studentCount) total += c.studentCount
+        total += c.studentCount || (Array.isArray(c.students) ? c.students.length : 0)
       }
       stats.value.studentCount = total
     }
@@ -165,24 +179,16 @@ function loadData() {
   }).then(function(assignmentRes) {
     if (assignmentRes.success) {
       const assignments = assignmentRes.data.slice(0, 5)
-      const result = []
-      for (let a of assignments) {
-        let clsName = '未知班级'
-        for (let c of classes.value) {
-          if (c.id === a.classId) {
-            clsName = c.name
-            break
-          }
-        }
-        result.push({
+      recentAssignments.value = assignments.map(function(a) {
+        const cls = classes.value.find(function(c) { return c.id === a.classId })
+        return {
           id: a.id,
           title: a.title,
-          className: clsName,
+          className: cls ? cls.name : '未分班',
           submittedCount: a.answerCount !== undefined ? a.answerCount : (a.submittedCount || 0),
           status: a.status
-        })
-      }
-      recentAssignments.value = result
+        }
+      })
     }
     return api.get('/teacher/papers')
   }).then(function(paperRes) {
@@ -192,13 +198,14 @@ function loadData() {
     return api.get('/teacher/answers')
   }).then(function(answerRes) {
     if (answerRes.success) {
-      let count = 0
-      for (let item of answerRes.data) {
-        if (item.status === 'submitted') count++
-      }
-      stats.value.pendingCount = count
+      const list = answerRes.data || []
+      stats.value.pendingCount = list.filter(function(item) { return item.status === 'submitted' }).length
+      // 只统计已经出分的答卷
+      const graded = list.filter(function(item) { return item.status !== 'submitted' && typeof item.totalScore === 'number' })
+      stats.value.avgScore = graded.length
+        ? Math.round(graded.reduce(function(sum, item) { return sum + item.totalScore }, 0) / graded.length)
+        : null
     }
-    stats.value.avgScore = 78
   }).catch(function(error) {
     console.error('加载数据失败:', error)
   })
@@ -206,222 +213,55 @@ function loadData() {
 </script>
 
 <style scoped>
-.teacher-dashboard {
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
+.t-dashboard { display: flex; flex-direction: column; gap: 28px; }
 
-/* === 页面头部 === */
-.page-header {
-  background: var(--surface-overlay);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-radius: var(--radius-xl);
-  padding: 28px 32px;
-  border: 1px solid hsla(0, 0%, 100%, 0.9);
-  box-shadow: var(--shadow-md);
-  position: relative;
-  overflow: hidden;
-  animation: slideUp var(--duration-slow) var(--ease-spring);
-}
+.greeting-date { margin: 0 0 6px; color: var(--nb-ink-3); font-size: 15px; }
+.greeting-title { margin: 0; font-family: var(--nb-font-display); font-weight: 400; font-size: clamp(32px, 3.4vw, 42px); line-height: 1.2; color: var(--nb-ink); letter-spacing: 0.02em; }
 
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+.today { position: relative; padding: 22px 26px 24px 30px; background: var(--nb-sheet); border: 1px solid var(--nb-line); border-radius: var(--nb-radius); box-shadow: var(--nb-shadow); }
+.today::before { content: ''; position: absolute; left: 0; top: 18px; bottom: 18px; width: 5px; border-radius: 0 5px 5px 0; background: var(--nb-red); }
+.today-label { font-family: var(--nb-font-display); font-size: 19px; color: var(--nb-red-ink); letter-spacing: 0.04em; }
+.today-body { margin-top: 8px; display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.today-text { flex: 1 1 380px; min-width: 0; }
+.today-main { margin: 0; font-size: 25px; font-weight: 700; line-height: 1.4; color: var(--nb-ink); }
+.today-sub { margin: 6px 0 0; max-width: 58ch; color: var(--nb-ink-2); font-size: 16px; line-height: 1.7; }
 
-.page-header::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  background: var(--brand-gradient);
+/* 数据卡：每张一种颜色，可点击进入对应页面 */
+.stat-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.stat-tile {
+  position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 14px; align-items: center;
+  padding: 18px 20px; border: 1px solid var(--nb-line); border-radius: var(--nb-radius); background: var(--nb-sheet); box-shadow: var(--nb-shadow);
+  font: inherit; text-align: left; cursor: pointer; overflow: hidden; transition: transform .15s ease, border-color .15s ease;
 }
+.stat-tile::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--tile); }
+.stat-tile:hover { transform: translateY(-2px); border-color: var(--tile); }
+.stat-icon { grid-row: span 2; width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; background: var(--tile-soft); color: var(--tile); font-size: 24px; }
+.stat-num { font-size: 34px; line-height: 1.1; color: var(--nb-ink); }
+.stat-name { font-size: 15px; color: var(--nb-ink-2); }
 
-.header-content {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 32px;
-}
+.board { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.section-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.section-title { font-family: var(--nb-font-display); font-weight: 400; font-size: 22px; color: var(--nb-ink); }
 
-.header-text h2 {
-  font-family: 'Noto Serif SC', serif;
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0;
+/* 常用操作：四个彩色入口 */
+.quick-title { margin: 0 0 14px; font-family: var(--nb-font-display); font-weight: 400; font-size: 22px; color: var(--nb-ink); }
+.quick-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.quick-tile {
+  display: flex; align-items: center; gap: 14px; padding: 18px; border: 1.5px solid var(--tile-soft); border-radius: var(--nb-radius);
+  background: var(--tile-soft); font: inherit; text-align: left; cursor: pointer; transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
 }
+.quick-tile:hover { transform: translateY(-2px); border-color: var(--tile); box-shadow: 0 12px 24px -16px var(--tile); }
+.quick-icon { width: 46px; height: 46px; flex-shrink: 0; display: grid; place-items: center; border-radius: 50%; background: var(--tile); color: #fff; font-size: 22px; }
+.quick-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.quick-label { font-size: 17px; font-weight: 700; color: var(--nb-ink); }
+.quick-desc { font-size: 14px; color: var(--nb-ink-2); }
 
-.header-text p {
-  margin: 10px 0 0;
-  color: var(--text-secondary);
-  font-size: 14px;
-  font-weight: 500;
+@media (max-width: 1200px) {
+  .stat-row, .quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .board { grid-template-columns: minmax(0, 1fr); }
 }
-
-/* === 统计卡片网格 === */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
-}
-
-.stat-card {
-  padding: 24px;
-  border-radius: var(--radius-xl);
-  background: var(--surface-raised);
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-sm);
-  transition: all var(--duration-normal) var(--ease-spring);
-  position: relative;
-  overflow: hidden;
-  animation: cardEnter var(--duration-slow) var(--ease-spring) backwards;
-}
-.stat-card:nth-child(1) { animation-delay: 0.05s; }
-.stat-card:nth-child(2) { animation-delay: 0.1s; }
-.stat-card:nth-child(3) { animation-delay: 0.15s; }
-.stat-card:nth-child(4) { animation-delay: 0.2s; }
-
-@keyframes cardEnter {
-  from { opacity: 0; transform: translateY(16px) scale(0.97); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-.stat-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0;
-  width: 4px;
-  height: 100%;
-  background: var(--brand-gradient);
-  opacity: 0;
-  transition: opacity var(--duration-normal);
-}
-
-.stat-card:hover {
-  transform: translateY(-6px);
-  box-shadow: var(--shadow-lg);
-  border-color: hsla(var(--brand-hue), 84%, 68%, 0.2);
-}
-.stat-card:hover::before { opacity: 1; }
-
-.stat-card .stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--primary-50);
-  color: var(--primary-500);
-  margin-bottom: 18px;
-  transition: all var(--duration-normal) var(--ease-spring);
-}
-.stat-card:hover .stat-icon { transform: scale(1.1) rotate(-5deg); }
-
-.stat-card .stat-value {
-  font-size: 36px;
-  font-weight: 800;
-  color: var(--text-primary);
-  font-family: 'Noto Serif SC', serif;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-}
-
-.stat-card .stat-label {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin-top: 8px;
-  font-weight: 600;
-}
-
-/* 渐变统计卡片 */
-.stat-card.is-gradient {
-  background: var(--brand-gradient);
-  border: none;
-}
-
-.stat-card.is-gradient .stat-icon {
-  background: hsla(0, 0%, 100%, 0.2);
-  color: white;
-}
-
-.stat-card.is-gradient .stat-value,
-.stat-card.is-gradient .stat-label {
-  color: white;
-}
-
-.stat-card.is-gradient::before { opacity: 1; }
-
-.stat-card::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 100px;
-  height: 100px;
-  background: radial-gradient(circle at top right, hsla(var(--brand-hue), 84%, 68%, 0.04) 0%, transparent 70%);
-  pointer-events: none;
-}
-
-/* === 主内容布局 === */
-.dashboard-layout {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  animation: slideUp var(--duration-slow) var(--ease-spring);
-  animation-delay: 0.1s;
-  animation-fill-mode: backwards;
-}
-
-/* === 面板卡片 === */
-.panel-card {
-  border-radius: var(--radius-xl) !important;
-  border: 1px solid var(--border-subtle) !important;
-  box-shadow: var(--shadow-sm) !important;
-  transition: all var(--duration-normal) var(--ease-spring) !important;
-  background: var(--surface-raised);
-}
-.panel-card:hover { box-shadow: var(--shadow-lg) !important; transform: translateY(-2px); }
-
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.section-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-/* === 快捷操作 === */
-.quick-actions {
-  display: flex;
-  gap: 12px;
-}
-.quick-actions .el-button {
-  flex: 1;
-  height: 56px;
-  font-size: 15px;
-  font-weight: 500;
-  transition: all var(--duration-normal) var(--ease-spring);
-}
-.quick-actions .el-button:hover { transform: translateY(-2px); }
-
-/* === 响应式 === */
-@media (max-width: 1024px) {
-  .stats-grid { grid-template-columns: repeat(2, 1fr); }
-  .dashboard-layout { grid-template-columns: 1fr; }
-}
-@media (max-width: 768px) {
-  .stats-grid { grid-template-columns: 1fr; }
-  .quick-actions { flex-direction: column; }
-  .quick-actions .el-button { width: 100%; }
+@media (max-width: 560px) {
+  .stat-row, .quick-grid { grid-template-columns: minmax(0, 1fr); }
+  .today-main { font-size: 21px; }
 }
 </style>

@@ -1,8 +1,8 @@
 <template>
   <div class="admin-classes">
     <div class="page-header">
-      <h2>班级列表管理</h2>
-      <p>查看管理员端导入后的班级信息与学生规模</p>
+      <h2>班级管理</h2>
+      <p>所有导入的班级和每个班的人数。新班级可以在“用户管理”里用 Excel 导入。</p>
     </div>
 
     <el-card class="gradient-card">

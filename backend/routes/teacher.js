@@ -4,7 +4,6 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const db = require('../database/memory-db');
-const { normalizeQuestion, publicQuestion } = require('../services/question-quality');
 const { recordQuestionResults } = require('../services/math-bank');
 
 function normalizeUploadedFileName(fileName) {
@@ -203,124 +202,12 @@ function buildAccuracyFromQuestionResults(questionResults) {
   return Math.round((correctCount / questionResults.length) * 100);
 }
 
-const demoStudentAnalyticsProfiles = {
-  'student-004': {
-    scoreTrend: [
-      { date: '2024-03-01T08:00:00.000Z', score: 86, assignmentTitle: '第一次测试' },
-      { date: '2024-03-08T08:00:00.000Z', score: 90, assignmentTitle: '阶段练习' },
-      { date: '2024-03-15T08:00:00.000Z', score: 92, assignmentTitle: '第二次测试' },
-      { date: '2024-03-22T08:00:00.000Z', score: 95, assignmentTitle: '综合提升' }
-    ],
-    knowledgePointMastery: {
-      'kp-001': { avgScore: '96.00', count: 4 },
-      'kp-002': { avgScore: '94.00', count: 4 },
-      'kp-003': { avgScore: '90.00', count: 3 },
-      'kp-005': { avgScore: '87.00', count: 3 },
-      'kp-007': { avgScore: '82.00', count: 2 }
-    },
-    wrongQuestions: [
-      {
-        questionId: 'demo-liuyang-001',
-        content: '已知 3x - 2 = 16，求 x 的值。刘洋在移项后忘记合并常数项。',
-        correctAnswer: 'x = 6',
-        studentAnswer: 'x = 5',
-        paperId: 'demo-paper-liuyang',
-        knowledgePoints: ['kp-005']
-      }
-    ]
-  },
-  'student-005': {
-    scoreTrend: [
-      { date: '2024-03-01T08:00:00.000Z', score: 78, assignmentTitle: '第一次测试' },
-      { date: '2024-03-08T08:00:00.000Z', score: 84, assignmentTitle: '阶段练习' },
-      { date: '2024-03-15T08:00:00.000Z', score: 88, assignmentTitle: '第二次测试' },
-      { date: '2024-03-22T08:00:00.000Z', score: 91, assignmentTitle: '综合提升' }
-    ],
-    knowledgePointMastery: {
-      'kp-001': { avgScore: '88.00', count: 4 },
-      'kp-002': { avgScore: '91.00', count: 4 },
-      'kp-003': { avgScore: '76.00', count: 3 },
-      'kp-005': { avgScore: '93.00', count: 3 },
-      'kp-007': { avgScore: '85.00', count: 2 }
-    },
-    wrongQuestions: [
-      {
-        questionId: 'demo-chenjing-001',
-        content: '计算 (-3) × (-4) ÷ 2。陈静乘除混合运算顺序掌握不稳定。',
-        correctAnswer: '6',
-        studentAnswer: '24',
-        paperId: 'demo-paper-chenjing',
-        knowledgePoints: ['kp-003']
-      },
-      {
-        questionId: 'demo-chenjing-002',
-        content: '判断两条直线是否平行，并说明理由。',
-        correctAnswer: '同位角相等，两直线平行',
-        studentAnswer: '看起来不相交所以平行',
-        paperId: 'demo-paper-chenjing',
-        knowledgePoints: ['kp-007']
-      }
-    ]
-  },
-  'student-010': {
-    scoreTrend: [
-      { date: '2024-03-01T08:00:00.000Z', score: 82, assignmentTitle: '第一次测试' },
-      { date: '2024-03-08T08:00:00.000Z', score: 79, assignmentTitle: '阶段练习' },
-      { date: '2024-03-15T08:00:00.000Z', score: 85, assignmentTitle: '第二次测试' },
-      { date: '2024-03-22T08:00:00.000Z', score: 87, assignmentTitle: '综合提升' }
-    ],
-    knowledgePointMastery: {
-      'kp-001': { avgScore: '84.00', count: 4 },
-      'kp-002': { avgScore: '72.00', count: 4 },
-      'kp-003': { avgScore: '88.00', count: 3 },
-      'kp-005': { avgScore: '80.00', count: 3 },
-      'kp-007': { avgScore: '94.00', count: 2 }
-    },
-    wrongQuestions: [
-      {
-        questionId: 'demo-zhenghua-001',
-        content: '计算 -7 + 12 - 8。郑华对有理数加减混合符号处理较薄弱。',
-        correctAnswer: '-3',
-        studentAnswer: '13',
-        paperId: 'demo-paper-zhenghua',
-        knowledgePoints: ['kp-002']
-      },
-      {
-        questionId: 'demo-zhenghua-002',
-        content: '解方程 4x + 6 = 2x + 18。',
-        correctAnswer: 'x = 6',
-        studentAnswer: 'x = 12',
-        paperId: 'demo-paper-zhenghua',
-        knowledgePoints: ['kp-005']
-      },
-      {
-        questionId: 'demo-zhenghua-003',
-        content: '判断 0.333... 是否为有理数并说明原因。',
-        correctAnswer: '是，可以写成 1/3',
-        studentAnswer: '不是，因为小数位很多',
-        paperId: 'demo-paper-zhenghua',
-        knowledgePoints: ['kp-001']
-      }
-    ]
-  }
-};
-
-function applyDemoStudentAnalyticsProfile(student, analytics) {
-  const profile = demoStudentAnalyticsProfiles[student.id];
-  if (!profile) return analytics;
-
-  return {
-    ...analytics,
-    scoreTrend: profile.scoreTrend,
-    knowledgePointMastery: profile.knowledgePointMastery,
-    wrongQuestions: profile.wrongQuestions
-  };
-}
+function applyDemoStudentAnalyticsProfile(student, analytics) { return analytics; }
 
 // 配置文件上传
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../uploads/papers');
+    const uploadDir = path.join(process.env.UPLOAD_DIR || path.join(__dirname, '../uploads'), 'papers');
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
@@ -328,25 +215,16 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const originalName = normalizeUploadedFileName(file.originalname);
-    cb(null, uniqueSuffix + path.extname(originalName));
+    const ext = { 'application/pdf': '.pdf', 'image/png': '.png', 'image/jpeg': '.jpg' }[file.mimetype];
+    cb(null, uniqueSuffix + ext);
   }
 });
 
 const upload = multer({
+  fileFilter: (_req, file, cb) => { const allowed = ['application/pdf', 'image/png', 'image/jpeg'].includes(file.mimetype); cb(allowed ? null : new Error('只允许 PDF、PNG 和 JPEG 试卷'), allowed); },
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpg|jpeg|png|pdf/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
 
-    if (extname && mimetype) {
-      cb(null, true);
-    } else {
-      cb(new Error('不支持的文件格式'));
-    }
-  }
 });
 
 // ========== 班级管理 ==========
@@ -449,6 +327,7 @@ router.put('/classes/:id', (req, res) => {
 router.delete('/classes/:id', (req, res) => {
   try {
     const { id } = req.params;
+    if (db.find('students', { classId: id }).length || db.find('assignments', { classId: id }).length) return res.status(400).json({ success: false, message: '班级仍有学生或作业，请先处理关联记录' });
     const deleted = db.deleteById('classes', id);
 
     if (!deleted) {
@@ -558,6 +437,7 @@ router.delete('/students/:id', (req, res) => {
       return res.status(404).json({ success: false, message: '学生不存在' });
     }
 
+    if (db.find('answers', { studentId: id }).length || db.find('learningRecords', { studentId: id }).length || db.find('drafts', { studentId: id }).length) return res.status(400).json({ success: false, message: '学生已有学习记录，请管理员办理账号与数据删除' });
     // 从班级中移除
     const cls = db.findById('classes', student.classId);
     if (cls) {
@@ -576,60 +456,16 @@ router.delete('/students/:id', (req, res) => {
   }
 });
 
-// 重置学生密码（班主任可重置本班学生，管理员可重置任意学生）
-router.post('/students/:id/reset-password', (req, res) => {
-  try {
-    const teacherId = req.headers['x-user-id'];
-    const { id } = req.params;
-
-    const student = db.findById('students', id);
-    if (!student) {
-      return res.status(404).json({ success: false, message: '学生不存在' });
-    }
-
-    // 归属校验：学生所在班级必须由当前教师负责
-    const cls = student.classId ? db.findById('classes', student.classId) : null;
-    const isOwner = !!(cls && String(cls.teacherId) === String(teacherId));
-    const isAdmin = !!(req.user && req.user.role === 'admin');
-    if (!isOwner && !isAdmin) {
-      return res.status(403).json({ success: false, message: '只能重置本班学生的密码' });
-    }
-
-    const user = db.findById('users', student.userId);
-    if (!user) {
-      return res.status(404).json({ success: false, message: '学生账号不存在' });
-    }
-
-    const bcrypt = require('bcryptjs');
-    const crypto = require('crypto');
-    const alphabet = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let newPassword = '';
-    const bytes = crypto.randomBytes(10);
-    for (let i = 0; i < 10; i += 1) newPassword += alphabet[bytes[i] % alphabet.length];
-
-    db.updateById('users', student.userId, { password: bcrypt.hashSync(newPassword, 10) });
-    db.addLog(teacherId, 'RESET_STUDENT_PASSWORD', { studentId: id, studentName: student.name, classId: student.classId || '' });
-
-    res.json({
-      success: true,
-      message: '密码已重置，请转告学生并提醒尽快修改',
-      data: {
-        studentId: id,
-        name: student.name,
-        username: user.username,
-        newPassword
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
 // ========== 试卷管理 ==========
 
 // 上传试卷
 router.post('/papers/upload', upload.single('file'), (req, res) => {
   try {
+    if (req.file) {
+      const data = fs.readFileSync(req.file.path);
+      const valid = req.file.mimetype === 'application/pdf' ? data.subarray(0, 5).toString() === '%PDF-' : req.file.mimetype === 'image/png' ? data.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])) : data[0] === 255 && data[1] === 216 && data[2] === 255;
+      if (!valid) { fs.unlinkSync(req.file.path); return res.status(400).json({ success: false, message: '试卷文件内容与格式不符' }); }
+    }
     const teacherId = req.headers['x-user-id'];
     const { title, classId } = req.body;
 
@@ -646,7 +482,7 @@ router.post('/papers/upload', upload.single('file'), (req, res) => {
       filePath: `/uploads/papers/${req.file.filename}`,
       fileName: originalName,
       fileSize: req.file.size,
-      fileType: path.extname(originalName),
+      fileType: path.extname(req.file.filename),
       status: 'pending', // pending, published
       questions: []
     });
@@ -707,10 +543,10 @@ router.delete('/papers/:id', (req, res) => {
       return res.status(404).json({ success: false, message: '试卷不存在' });
     }
 
+    if (db.find('assignments').some(item => item.paperId === paper.id)) return res.status(400).json({ success: false, message: '试卷已用于作业，请保留原卷供复核' });
     // 删除文件
     if (paper.filePath) {
-      const relativePath = paper.filePath.replace(/^\//, '');
-      const filePath = path.join(__dirname, '..', relativePath);
+      const filePath = require('../services/upload-path').resolveUpload(paper.filePath);
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
@@ -748,16 +584,25 @@ router.get('/questions', (req, res) => {
 // 添加题目
 router.post('/questions', (req, res) => {
   try {
-    const paperId = req.body.paperId || null;
+    const { paperId, type, content, options, answer, knowledgePoints, difficulty, score } = req.body;
 
-    // 统一走题库质量校验：题型、选项唯一性、答案对应、分值、解析完整度
+    if (!paperId || !type || !content) {
+      return res.status(400).json({ success: false, message: '参数不完整' });
+    }
+
     const question = db.create('questions', {
-      ...normalizeQuestion(req.body, {}, req.user),
-      paperId
+      paperId,
+      type, // choice, fill, shortAnswer
+      content,
+      options: options || [],
+      answer,
+      knowledgePoints: knowledgePoints || [],
+      difficulty: difficulty || 'medium', // easy, medium, hard
+      score: score || 1
     });
 
     // 更新试卷题目列表
-    const paper = paperId ? db.findById('papers', paperId) : null;
+    const paper = db.findById('papers', paperId);
     if (paper) {
       db.updateById('papers', paperId, {
         questions: [...paper.questions, question.id]
@@ -766,7 +611,7 @@ router.post('/questions', (req, res) => {
 
     res.json({ success: true, data: question, message: '题目添加成功' });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
@@ -774,14 +619,11 @@ router.post('/questions', (req, res) => {
 router.put('/questions/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const existing = db.findById('questions', id);
-    if (!existing) {
-      return res.status(404).json({ success: false, message: '题目不存在' });
-    }
-    if (req.user && req.user.role === 'teacher' && existing.createdBy && existing.createdBy !== req.user.id) {
-      return res.status(403).json({ success: false, message: '仅可修改自己录入的题目' });
-    }
-    const updated = db.updateById('questions', id, normalizeQuestion(req.body, existing, req.user || { id: existing.createdBy, role: 'teacher' }));
+    const { content, options, answer, knowledgePoints, difficulty, score } = req.body;
+
+    const updated = db.updateById('questions', id, {
+      content, options, answer, knowledgePoints, difficulty, score
+    });
 
     if (!updated) {
       return res.status(404).json({ success: false, message: '题目不存在' });
@@ -789,33 +631,7 @@ router.put('/questions/:id', (req, res) => {
 
     res.json({ success: true, data: updated, message: '题目更新成功' });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
-  }
-});
-
-// 审核题目：通过前必须有解析，修改过的题目会重新回到待审核
-router.post('/questions/:id/review', (req, res) => {
-  try {
-    const existing = db.findById('questions', req.params.id);
-    if (!existing) {
-      return res.status(404).json({ success: false, message: '题目不存在' });
-    }
-    if (req.user && req.user.role === 'teacher' && existing.createdBy && existing.createdBy !== req.user.id) {
-      return res.status(403).json({ success: false, message: '只能审核自己录入的题目' });
-    }
-    const status = req.body.reviewStatus;
-    if (!['approved', 'pending', 'withdrawn'].includes(status)) {
-      return res.status(400).json({ success: false, message: '审核状态无效' });
-    }
-    const saved = db.updateById(
-      'questions',
-      existing.id,
-      normalizeQuestion({ ...existing, reviewStatus: status }, existing, req.user || { id: existing.createdBy, role: 'admin' })
-    );
-    db.addLog((req.user && req.user.id) || existing.createdBy, 'REVIEW_QUESTION', { questionId: existing.id, reviewStatus: status });
-    res.json({ success: true, data: saved, message: status === 'approved' ? '题目已通过审核' : '题目状态已更新' });
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
@@ -884,6 +700,7 @@ router.post('/assignments', (req, res) => {
         return res.status(400).json({ success: false, message: '所选题目不存在或已失效' });
       }
 
+      if (selectedQuestions.some(question => question.reviewStatus !== 'approved')) return res.status(400).json({ success: false, message: '请先审核所有作业题目' });
       const generatedPaper = db.create('papers', {
         title: `${title}-题目集`,
         teacherId,
@@ -903,7 +720,12 @@ router.post('/assignments', (req, res) => {
       db.updateById('papers', effectivePaperId, { status: 'published' });
     }
 
+    const snapshotIds = db.findById('papers', effectivePaperId)?.questions || [];
+    const questionSnapshots = snapshotIds.map(id => db.findById('questions', id)).filter(Boolean).map(item => ({ ...item }));
+    if (questionSnapshots.length !== snapshotIds.length || questionSnapshots.some(item => item.reviewStatus !== 'approved')) return res.status(400).json({ success: false, message: '试卷题目须存在且已审核' });
     const assignment = db.create('assignments', {
+      questionIds: snapshotIds,
+      questionSnapshots,
       title,
       paperId: effectivePaperId,
       classId,
@@ -1216,6 +1038,11 @@ router.get('/answers/export/excel', (req, res) => {
   }
 });
 
+// 已出最终分数的提交：自动批改完成或老师已批改。status 为 submitted 表示还在等老师批改。
+function isGradedAnswer(answer) {
+  return answer && answer.status !== 'submitted';
+}
+
 router.get('/analytics/class/:classId', (req, res) => {
   try {
     const { classId } = req.params;
@@ -1227,43 +1054,26 @@ router.get('/analytics/class/:classId', (req, res) => {
 
     // 获取班级所有答题记录
     const answers = db.find('answers').filter(a => a.classId === classId);
+    // 待老师批改（status 为 submitted）的提交还没有最终分数，不计入成绩和掌握度统计
+    const gradedAnswers = answers.filter(isGradedAnswer);
 
     // 计算统计数据
     let totalScore = 0;
     let totalCount = 0;
     const knowledgePointStats = {};
-    const studentScores = [];
-    const studentLevels = [];
+    const scoreByStudent = {};
 
-    answers.forEach(answer => {
+    gradedAnswers.forEach(answer => {
       if (answer.totalScore !== undefined) {
         totalScore += answer.totalScore;
         totalCount++;
 
-        const student = db.findById('students', answer.studentId);
-        if (student) {
-          // 计算学生层次
-          let level = 'normal';
-          if (answer.totalScore >= 90) {
-            level = 'strong';
-          } else if (answer.totalScore < 60) {
-            level = 'weak';
-          }
-
-          studentScores.push({
-            studentId: answer.studentId,
-            studentName: student.name,
-            score: answer.totalScore,
-            level
-          });
-
-          studentLevels.push({
-            studentId: answer.studentId,
-            studentName: student.name,
-            level,
-            score: answer.totalScore
-          });
+        // 按学生汇总：同一个学生多次提交只算一行，取平均分
+        if (!scoreByStudent[answer.studentId]) {
+          scoreByStudent[answer.studentId] = { total: 0, count: 0 };
         }
+        scoreByStudent[answer.studentId].total += answer.totalScore;
+        scoreByStudent[answer.studentId].count++;
 
         // 统计知识点
         if (answer.knowledgePointScores) {
@@ -1280,11 +1090,52 @@ router.get('/analytics/class/:classId', (req, res) => {
 
     const avgScore = totalCount > 0 ? (totalScore / totalCount).toFixed(2) : 0;
 
+    // 每个学生一行：平均分与层次（90 分及以上为优秀，60 分以下为薄弱）
+    const studentScores = Object.entries(scoreByStudent)
+      .map(([studentId, stats]) => {
+        const student = db.findById('students', studentId);
+        if (!student) return null;
+        const score = Math.round((stats.total / stats.count) * 10) / 10;
+        const level = score >= 90 ? 'strong' : score < 60 ? 'weak' : 'normal';
+        return { studentId, studentName: student.name, score, level, submissionCount: stats.count };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score);
+    const studentLevels = studentScores.map(item => ({
+      studentId: item.studentId,
+      studentName: item.studentName,
+      level: item.level,
+      score: item.score
+    }));
+
     // 计算知识点掌握度
     const knowledgePointMastery = {};
     Object.entries(knowledgePointStats).forEach(([kp, stats]) => {
       knowledgePointMastery[kp] = (stats.total / stats.count).toFixed(2);
     });
+
+    // 知识点掌握度列表（附名称，按掌握度从低到高）
+    const knowledgePointMasteryList = Object.entries(knowledgePointMastery)
+      .map(([kpId, value]) => {
+        const kp = db.findById('knowledgePoints', kpId);
+        return { id: kpId, name: (kp && kp.name) || kpId, mastery: Number(value) };
+      })
+      .sort((a, b) => a.mastery - b.mastery);
+
+    // 按题型统计错题次数（来自真实答题记录）
+    const QUESTION_TYPE_LABELS = { choice: '选择题', fill: '填空题', judge: '判断题', subjective: '解答题', calculation: '计算题', proof: '证明题' };
+    const errorTypeCounter = {};
+    gradedAnswers.forEach(answer => {
+      (answer.questionResults || []).forEach(result => {
+        if (result.correct) return;
+        const question = db.findById('questions', result.questionId);
+        const type = (question && question.type) || 'other';
+        errorTypeCounter[type] = (errorTypeCounter[type] || 0) + 1;
+      });
+    });
+    const errorTypeStats = Object.entries(errorTypeCounter)
+      .map(([type, count]) => ({ type, label: QUESTION_TYPE_LABELS[type] || '其他', count }))
+      .sort((a, b) => b.count - a.count);
 
     // 统计各层次学生数量
     const levelDistribution = {
@@ -1298,9 +1149,12 @@ router.get('/analytics/class/:classId', (req, res) => {
       data: {
         avgScore,
         studentCount: cls.students.length,
-        completedCount: totalCount,
+        completedCount: answers.length,
+        pendingReviewCount: answers.length - gradedAnswers.length,
         studentScores,
         knowledgePointMastery,
+        knowledgePointMasteryList,
+        errorTypeStats,
         levelDistribution,
         studentLevels
       }
@@ -1320,8 +1174,8 @@ router.get('/analytics/student/:studentId', (req, res) => {
       return res.status(404).json({ success: false, message: '学生不存在' });
     }
 
-    // 获取学生所有答题记录
-    const answers = db.find('answers').filter(a => a.studentId === studentId);
+    // 获取学生所有已批改的答题记录（待批改的提交还没有最终分数，不计入趋势和错题）
+    const answers = db.find('answers').filter(a => a.studentId === studentId && isGradedAnswer(a));
 
     // 计算成绩趋势
     const scoreTrend = answers

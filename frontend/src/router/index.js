@@ -17,6 +17,12 @@ const routes = [
     meta: { requiresAuth: true, role: 'teacher' },
     children: [
       {
+        path: 'review-center',
+        name: 'TeacherReviewCenter',
+        component: () => import('@/views/teacher/ReviewCenter.vue'),
+        meta: { title: '复核与纠错' }
+      },
+      {
         path: '',
         redirect: '/teacher/dashboard'
       },
@@ -61,12 +67,6 @@ const routes = [
         name: 'TeacherGrading',
         component: function () { return import('@/views/teacher/Grading.vue') },
         meta: { title: '批改中心' }
-      },
-      {
-        path: 'review-center',
-        name: 'TeacherReviewCenter',
-        component: function () { return import('@/views/teacher/ReviewCenter.vue') },
-        meta: { title: '复核与纠错' }
       },
       {
         path: 'analytics/class',

@@ -2,14 +2,14 @@
   <div class="student-profile">
     <div class="page-header">
       <h2>个人信息</h2>
-      <p>查看和修改您的个人信息</p>
+      <p>改名字、性别，或者加入班级。</p>
     </div>
     
     <el-row :gutter="20">
       <el-col :span="12">
         <el-card class="gradient-card">
           <template #header>基本信息</template>
-          <el-form ref="formRef" :model="form" label-width="80px">
+          <el-form ref="formRef" :model="form" label-width="104px">
             <el-form-item label="学号">
               <el-input v-model="form.studentNo" disabled />
             </el-form-item>
@@ -35,7 +35,7 @@
       <el-col :span="12">
         <el-card class="gradient-card">
           <template #header>绑定班级</template>
-          <el-form label-width="80px">
+          <el-form label-width="104px">
             <el-form-item label="当前班级">
               <el-input v-model="className" disabled />
             </el-form-item>

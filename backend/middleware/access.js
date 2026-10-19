@@ -1,295 +1,262 @@
-/**
- * 行级访问控制（Row-Level ACL）
- *
- * 与 middleware/auth.js 的区别：
- *   auth.js        只做"登录了没有 + 角色门"，老师 A 拿到老师 B 的班级 ID 依然能读。
- *   access.js      在角色门之上再做"这条记录属不属于你"的判定，封堵 IDOR（越权访问对象）。
- *
- * 四件套：
- *   authenticate    校验 JWT，把身份写进 req.user，并覆盖客户端伪造的 x-user-id
- *   roles(...)      角色门
- *   allowedRecord   单条记录的行级判定（教师看自己班、学生只看自己）
- *   privateResponse 响应脱敏（剔除 password / apiKey / tokenVersion 等字段），并开启 ALS 上下文
- *   teacherGuard    针对 URL 参数与请求体的越权拦截
- */
-
-const { AsyncLocalStorage } = require('node:async_hooks');
-const jwt = require('jsonwebtoken');
-const { JWT_SECRET } = require('../config/auth-secret');
-const db = require('../database/memory-db');
-
+const { AsyncLocalStorage } = require("node:async_hooks");
+const crypto = require("node:crypto");
+const fs = require("node:fs");
+const path = require("node:path");
+const jwt = require("jsonwebtoken");
 const scope = new AsyncLocalStorage();
-
-/** 集合可能尚未建立（新功能首次上线），统一兜底为空数组，避免判定时抛错 */
-function rows(collection) {
-  const value = db.data[collection];
-  return Array.isArray(value) ? value : [];
+let secret;
+function getSecret() {
+  if (secret) return secret;
+  if (process.env.JWT_SECRET) {
+    if (
+      process.env.NODE_ENV === "production" &&
+      process.env.JWT_SECRET.length < 32
+    )
+      throw new Error("JWT_SECRET must contain at least 32 characters");
+    return (secret = process.env.JWT_SECRET);
+  }
+  if (process.env.NODE_ENV === "production")
+    throw new Error("Production requires JWT_SECRET");
+  const file = path.join(
+    process.env.DATA_DIR || path.join(__dirname, "../database"),
+    ".jwt-secret",
+  );
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  if (!fs.existsSync(file))
+    fs.writeFileSync(file, crypto.randomBytes(48).toString("hex"), {
+      mode: 0o600,
+    });
+  return (secret = fs.readFileSync(file, "utf8").trim());
 }
-
 function tokenFrom(req) {
-  const header = req.headers.authorization || req.headers.Authorization || '';
-  if (typeof header === 'string' && header.startsWith('Bearer ')) {
-    return header.slice(7).trim();
-  }
-  const cookie = String(req.headers.cookie || '');
-  const hit = cookie
-    .split(';')
-    .map((item) => item.trim())
-    .find((item) => item.startsWith('session='));
-  return hit ? hit.slice(8) : '';
+  const header = req.headers.authorization || "";
+  if (header.startsWith("Bearer ")) return header.slice(7);
+  return (req.headers.cookie || "")
+    .split(";")
+    .map((x) => x.trim())
+    .find((x) => x.startsWith("session="))
+    ?.slice(8);
 }
-
 function authenticate(req, res, next) {
-  if (req.method === 'OPTIONS') return next();
-  const token = tokenFrom(req);
-  if (!token) {
-    return res.status(401).json({ success: false, message: '未登录或登录已过期，请重新登录' });
-  }
-  let decoded;
   try {
-    decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
-  } catch (e) {
-    const expired = e && e.name === 'TokenExpiredError';
-    return res
-      .status(401)
-      .json({ success: false, message: expired ? '登录已过期，请重新登录' : '身份凭证无效，请重新登录' });
+    const decoded = jwt.verify(tokenFrom(req) || "", getSecret(), {
+      algorithms: ["HS256"],
+    });
+    const db = require("../database/memory-db");
+    const user = db.data.users.find((item) => item.id === decoded.userId);
+    if (
+      !user ||
+      user.disabled ||
+      (user.tokenVersion || 0) !== (decoded.tokenVersion || 0)
+    )
+      throw new Error();
+    req.user = { id: user.id, role: user.role };
+    req.headers["x-user-id"] = user.id;
+    next();
+  } catch {
+    res.status(401).json({ success: false, message: "请重新登录" });
   }
-  const userId = decoded.userId || decoded.id;
-  const user = rows('users').find((item) => item.id === userId);
-  if (!user) {
-    return res.status(401).json({ success: false, message: '账号不存在或已被禁用' });
-  }
-  if (user.disabled) {
-    return res.status(401).json({ success: false, message: '账号已被禁用，请联系管理员' });
-  }
-  // 支持"改密即失效"：登录态里记录的 tokenVersion 必须与账号当前值一致
-  if ((user.tokenVersion || 0) !== (decoded.tokenVersion || 0)) {
-    return res.status(401).json({ success: false, message: '登录状态已失效，请重新登录' });
-  }
-  req.user = { id: user.id, username: user.username, role: user.role, name: user.name };
-  // 以令牌身份为准，客户端自带的 x-user-id 一律覆盖
-  req.headers['x-user-id'] = user.id;
-  return next();
 }
-
 function roles(...allowed) {
   return (req, res, next) =>
-    allowed.includes(req.user && req.user.role)
+    allowed.includes(req.user.role)
       ? next()
-      : res.status(403).json({ success: false, message: '无权访问此功能' });
+      : res.status(403).json({ success: false, message: "无权访问此功能" });
 }
-
-/**
- * 判断一条记录是否属于当前操作者。
- * admin 直接放行；教师看自己班级及其学生；学生只看自己。
- */
 function allowedRecord(collection, item, actor = scope.getStore()) {
-  if (!actor || actor.role === 'admin' || !item) return true;
-
-  const teacher = rows('teachers').find((x) => x.id === actor.id || x.userId === actor.id);
-  const student = rows('students').find((x) => x.id === actor.id || x.userId === actor.id);
-
+  if (!actor || actor.role === "admin" || !item) return true;
+  const db = require("../database/memory-db").data;
+  const teacher = db.teachers.find(
+    (x) => x.id === actor.id || x.userId === actor.id,
+  );
+  const student = db.students.find(
+    (x) => x.id === actor.id || x.userId === actor.id,
+  );
   const ownClass = (id) =>
-    !id
-      ? false
-      : rows('classes').some(
-          (x) =>
-            x.id === id &&
-            (x.teacherId === actor.id ||
-              x.teacherId === teacher?.id ||
-              (Array.isArray(teacher?.classes) && teacher.classes.includes(x.id))),
-        );
-
+    db.classes.some(
+      (x) =>
+        x.id === id &&
+        (x.teacherId === actor.id ||
+          x.teacherId === teacher?.id ||
+          teacher?.classes?.includes(x.id)),
+    );
   const ownStudent = (id) =>
-    !id
-      ? false
-      : rows('students').some((x) => (x.id === id || x.userId === id) && ownClass(x.classId));
-
-  if (actor.role === 'teacher') {
-    if (collection === 'classes') return ownClass(item.id);
-    if (collection === 'students') return ownClass(item.classId);
-    if (collection === 'teachers') return item.id === teacher?.id || item.id === actor.id;
-    if (collection === 'users') {
+    db.students.some(
+      (x) => (x.id === id || x.userId === id) && ownClass(x.classId),
+    );
+  if (actor.role === "teacher") {
+    if (collection === "classes") return ownClass(item.id);
+    if (collection === "students") return ownClass(item.classId);
+    if (collection === "teachers") return item.id === teacher?.id;
+    if (collection === "users")
       return (
         item.id === actor.id ||
-        rows('students').some((x) => x.userId === item.id && ownClass(x.classId))
+        db.students.some((x) => x.userId === item.id && ownClass(x.classId))
       );
-    }
-    if (collection === 'papers' || collection === 'assignments') {
-      // 没有归属人的记录（系统内置 / 管理员统一上传）视为公共资源，教师可读可维护
-      return !item.teacherId || item.teacherId === actor.id || item.teacherId === teacher?.id;
-    }
+    if (collection === "papers" || collection === "assignments")
+      return item.teacherId === actor.id || item.teacherId === teacher?.id;
     if (
       [
-        'answers',
-        'learningRecords',
-        'studentQuestionAttempts',
-        'masteredWrongQuestions',
-        'questionReports',
+        "answers",
+        "learningRecords",
+        "studentQuestionAttempts",
+        "masteredWrongQuestions",
+        "questionReports",
       ].includes(collection) ||
-      collection.startsWith('student_mistake_')
-    ) {
+      collection.startsWith("student_mistake_")
+    )
       return ownStudent(item.studentId);
-    }
-    if (['student_answer', 'student_knowledge_mastery', 'mastery_snapshot'].includes(collection)) {
+    if (
+      [
+        "student_answer",
+        "student_knowledge_mastery",
+        "mastery_snapshot",
+      ].includes(collection)
+    )
       return ownStudent(item.userId);
-    }
-    if (collection === 'drafts') return false;
-    if (collection === 'questions') {
-      return item.reviewStatus === 'approved' || item.createdBy === actor.id || !item.createdBy;
-    }
+    if (collection === "drafts") return false;
+    if (collection === "questions")
+      return (
+        item.reviewStatus === "approved" ||
+        item.createdBy === actor.id ||
+        !item.createdBy
+      );
   }
-
-  if (actor.role === 'student') {
-    if (collection === 'students') return item.id === student?.id || item.userId === actor.id;
-    if (collection === 'classes') return item.id === student?.classId;
-    if (collection === 'users') return item.id === actor.id;
-    if (collection === 'teachers') {
-      return rows('classes').some((x) => x.id === student?.classId && x.teacherId === item.id);
-    }
-    if (collection === 'assignments') {
-      return Array.isArray(item.studentIds) && item.studentIds.length
-        ? item.studentIds.includes(student?.id) || item.studentIds.includes(actor.id)
+  if (actor.role === "student") {
+    if (collection === "students") return item.id === student?.id;
+    if (collection === "classes") return item.id === student?.classId;
+    if (collection === "users") return item.id === actor.id;
+    if (collection === "teachers")
+      return db.classes.some(
+        (x) => x.id === student?.classId && x.teacherId === item.id,
+      );
+    if (collection === "assignments")
+      return item.studentIds?.length
+        ? item.studentIds.includes(student?.id)
         : item.classId === student?.classId;
-    }
-    if (collection === 'papers') {
-      return rows('assignments').some(
+    if (collection === "papers")
+      return db.assignments.some(
         (x) =>
           x.paperId === item.id &&
-          (Array.isArray(x.studentIds) && x.studentIds.length
-            ? x.studentIds.includes(student?.id) || x.studentIds.includes(actor.id)
+          (x.studentIds?.length
+            ? x.studentIds.includes(student?.id)
             : x.classId === student?.classId),
       );
-    }
     if (
       [
-        'answers',
-        'learningRecords',
-        'studentQuestionAttempts',
-        'drafts',
-        'masteredWrongQuestions',
-        'recommendationLogs',
+        "answers",
+        "learningRecords",
+        "studentQuestionAttempts",
+        "drafts",
+        "masteredWrongQuestions",
+        "recommendationLogs",
       ].includes(collection) ||
-      collection.startsWith('student_mistake_')
-    ) {
-      return item.studentId === student?.id || item.studentId === actor.id;
-    }
-    if (['student_answer', 'student_knowledge_mastery', 'mastery_snapshot'].includes(collection)) {
-      return item.userId === student?.id || item.userId === actor.id;
-    }
+      collection.startsWith("student_mistake_")
+    )
+      return item.studentId === student?.id;
+    if (
+      [
+        "student_answer",
+        "student_knowledge_mastery",
+        "mastery_snapshot",
+      ].includes(collection)
+    )
+      return item.userId === student?.id;
   }
-
   return true;
 }
-
-/** 响应脱敏：任何接口都不会把密码哈希、密钥、令牌版本号返回给前端 */
-const SENSITIVE_KEYS = new Set([
-  'password',
-  'passwd',
-  'passwordHash',
-  'password_hash',
-  'oldPassword',
-  'confirmPassword',
-  'secret',
-  'clientSecret',
-  'apiKey',
-  'api_key',
-  'tokenVersion'
-]);
-
 function privateResponse(req, res, next) {
   const original = res.json.bind(res);
   const clean = (value) => {
     if (Array.isArray(value)) return value.map(clean);
-    if (!value || typeof value !== 'object') return value;
-    // Date / Buffer 这类内置对象不能按普通对象拆解，否则会被清成空对象
-    if (value instanceof Date) return value.toISOString();
-    if (Buffer.isBuffer(value)) return value;
+    if (!value || typeof value !== "object") return value;
     return Object.fromEntries(
       Object.entries(value)
         .filter(
           ([key]) =>
-            !SENSITIVE_KEYS.has(key) &&
-            !(req.user && req.user.role === 'student' && ['snapshot', 'questionSnapshots'].includes(key)),
+            !/password|secret|apiKey|tokenVersion/i.test(key) &&
+            !(
+              req.user.role === "student" &&
+              ["snapshot", "questionSnapshots"].includes(key)
+            ),
         )
         .map(([key, item]) => [key, clean(item)]),
     );
   };
-  res.json = (payload) => original(req.path === '/backup' ? payload : clean(payload));
-  // 开启行级上下文：后续 allowedRecord 不传 actor 时自动取当前登录用户
+  res.json = (payload) =>
+    original(req.path === "/backup" ? payload : clean(payload));
   scope.run(req.user, next);
 }
-
-/**
- * 教师端越权拦截。
- * 覆盖三类常见绕过：URL 里的记录 ID、请求体/查询串里的 classId、批量操作里的 studentIds。
- */
 function teacherGuard(req, res, next) {
-  const parts = req.path.split('/').filter(Boolean);
+  const db = require("../database/memory-db");
+  const parts = req.path.split("/").filter(Boolean);
   const collection = {
-    classes: 'classes',
-    students: 'students',
-    papers: 'papers',
-    assignments: 'assignments',
-    answers: 'answers',
-    questions: 'questions',
-    practices: 'learningRecords',
+    classes: "classes",
+    students: "students",
+    papers: "papers",
+    assignments: "assignments",
+    answers: "answers",
+    questions: "questions",
+    practices: "learningRecords",
   }[parts[0]];
-
-  if (collection && parts[1] && !['upload', 'export', 'curriculum'].includes(parts[1])) {
-    const item = rows(collection).find((x) => x.id === parts[1]);
-    // 题目：可以改公共题库，但不能改别的老师自己录的题
-    const editQuestion =
-      collection === 'questions' && req.method !== 'GET' && !!item?.createdBy;
+  if (
+    collection &&
+    parts[1] &&
+    !["upload", "export", "curriculum"].includes(parts[1])
+  ) {
+    const item = db.data[collection]?.find((x) => x.id === parts[1]);
+    const editQuestion = collection === "questions" && req.method !== "GET";
     if (
       item &&
       (!allowedRecord(collection, item, req.user) ||
         (editQuestion && item.createdBy !== req.user.id))
-    ) {
-      return res.status(403).json({ success: false, message: '无权操作此记录' });
-    }
+    )
+      return res
+        .status(403)
+        .json({ success: false, message: "无权操作此记录" });
   }
-
-  const classIds = [
+  for (const id of [
     req.body?.classId,
     req.query?.classId,
-    parts[0] === 'analytics' && parts[1] === 'class' ? parts[2] : null,
-  ].filter(Boolean);
-  for (const id of classIds) {
+    parts[0] === "analytics" && parts[1] === "class" ? parts[2] : null,
+  ].filter(Boolean)) {
     if (
-      !allowedRecord('classes', rows('classes').find((x) => x.id === id), req.user) ||
-      !rows('classes').some((x) => x.id === id)
-    ) {
-      return res.status(403).json({ success: false, message: '无权访问此班级' });
-    }
+      !allowedRecord(
+        "classes",
+        db.data.classes.find((x) => x.id === id),
+        req.user,
+      ) ||
+      !db.data.classes.some((x) => x.id === id)
+    )
+      return res
+        .status(403)
+        .json({ success: false, message: "无权访问此班级" });
   }
-
   const studentIds = [
     ...(Array.isArray(req.body?.studentIds) ? req.body.studentIds : []),
-    parts[0] === 'analytics' && parts[1] === 'student' ? parts[2] : null,
+    parts[0] === "analytics" && parts[1] === "student" ? parts[2] : null,
   ].filter(Boolean);
   if (
     studentIds.some(
       (id) =>
-        !rows('students').some((x) => x.id === id && allowedRecord('students', x, req.user)),
+        !db.data.students.some(
+          (x) => x.id === id && allowedRecord("students", x, req.user),
+        ),
     )
-  ) {
-    return res.status(403).json({ success: false, message: '无权访问此学生' });
-  }
-
+  )
+    return res.status(403).json({ success: false, message: "无权访问此学生" });
   if (
     req.body?.paperId &&
-    !rows('papers').some((x) => x.id === req.body.paperId && allowedRecord('papers', x, req.user))
-  ) {
-    return res.status(403).json({ success: false, message: '无权访问此试卷' });
-  }
-
-  return next();
+    !db.data.papers.some(
+      (x) => x.id === req.body.paperId && allowedRecord("papers", x, req.user),
+    )
+  )
+    return res.status(403).json({ success: false, message: "无权访问此试卷" });
+  next();
 }
-
 module.exports = {
   scope,
-  rows,
+  getSecret,
   tokenFrom,
   authenticate,
   roles,

@@ -4,10 +4,14 @@ import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
+import dayjs from 'dayjs'
+import 'dayjs/locale/zh-cn'
 
 import App from './App.vue'
 import router from './router'
 import './styles/index.css'
+
+dayjs.locale('zh-cn')
 
 var app = createApp(App)
 

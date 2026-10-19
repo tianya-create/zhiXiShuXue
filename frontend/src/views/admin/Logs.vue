@@ -2,7 +2,7 @@
   <div class="admin-logs">
     <div class="page-header">
       <h2>操作日志</h2>
-      <p>查看系统操作记录</p>
+      <p>谁在什么时间做了什么操作，都记在这里。可以按操作类型筛选。</p>
     </div>
     
     <el-card class="gradient-card">
@@ -23,11 +23,15 @@
       <el-table :data="logs" style="width: 100%" v-loading="loading">
         <el-table-column prop="action" label="操作类型" width="150">
           <template #default="scope">
-            <el-tag :type="getActionType(scope.row.action)">{{ scope.row.action }}</el-tag>
+            <el-tag :type="getActionType(scope.row.action)">{{ actionText(scope.row.action) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="userId" label="用户ID" width="200" />
-        <el-table-column prop="details" label="详情" show-overflow-tooltip />
+        <el-table-column label="用户" width="200">
+          <template #default="scope">{{ userText(scope.row) }}</template>
+        </el-table-column>
+        <el-table-column label="详情" show-overflow-tooltip>
+          <template #default="scope">{{ detailsText(scope.row.details) }}</template>
+        </el-table-column>
         <el-table-column prop="timestamp" label="时间" width="180">
           <template #default="scope">
             {{ formatDate(scope.row.timestamp) }}
@@ -48,6 +52,7 @@
 </template>
 
 <script setup>
+import { actionText, detailsText, userText } from '@/utils/log-text'
 import { ref, reactive, onMounted } from 'vue'
 import api from '@/utils/api'
 import dayjs from 'dayjs'

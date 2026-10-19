@@ -3,11 +3,12 @@ import { captureException } from './sentry'
 
 var api = axios.create({
   baseURL: '/api',
-  timeout: 15000,
+  timeout: 35000,
   headers: { 'Content-Type': 'application/json' }
 })
 
 api.interceptors.request.use(function (config) {
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) { delete config.headers['Content-Type']; config.timeout = 120000 }
   var token = localStorage.getItem('token')
   if (token) config.headers.Authorization = 'Bearer ' + token
   var userStr = localStorage.getItem('user')
@@ -28,7 +29,7 @@ api.interceptors.response.use(function (response) {
     return Promise.reject(error)
   }
   config.__retryCount = config.__retryCount || 0
-  if ((error.code === 'ECONNABORTED' || !error.response) && config.__retryCount < 1) {
+  if (config.method === 'get' && (error.code === 'ECONNABORTED' || !error.response) && config.__retryCount < 1) {
     config.__retryCount += 1
     return api(config)
   }
@@ -45,10 +46,13 @@ var request = {
   get: function (url, params) { return api.get(url, { params: params }) },
   post: function (url, data) { return api.post(url, data) },
   put: function (url, data) { return api.put(url, data) },
-  delete: function (url) { return api.delete(url) }
+  delete: function (url) { return api.delete(url) },
+  upload: function (url, file) { const data = new FormData(); data.append('file', file); return api.post(url, data) }
 }
 
 request.student = {
+  getAiTutorStatus: function () { return request.get('/ai-tutor/status') },
+  askAiTutor: function (data) { return request.post('/ai-tutor/chat', data) },
   getWrongQuestions: function () { return request.get('/student/wrong-questions') },
   getWeakPoints: function () { return request.get('/student/weak-points') },
   getRecommendations: function (params) { return request.get('/student/recommendations', params) },
@@ -57,15 +61,7 @@ request.student = {
   getKnowledgeDetail: function (kpId) { return request.get('/student/knowledge-point/' + kpId + '/detail') },
   getPracticeQuestions: function (kpId) { return request.get('/student/practice/' + kpId) },
   submitPractice: function (kpId, data) { return request.post('/student/practice/' + kpId + '/submit', data) },
-  getQuestionsByKp: function (kpId) { return request.get('/student/questions', { knowledgePointId: kpId }) },
-  getAiTutorStatus: function () { return request.get('/student/ai-tutor/status') },
-  askAiTutor: function (data) { return request.post('/student/ai-tutor/chat', data) }
-}
-
-request.admin = {
-  getAiTutorSettings: function () { return request.get('/admin/ai-tutor/settings') },
-  validateAiTutorSettings: function (data) { return request.post('/admin/ai-tutor/validate', data) },
-  saveAiTutorSettings: function (data) { return request.put('/admin/ai-tutor/settings', data) }
+  getQuestionsByKp: function (kpId) { return request.get('/student/questions', { knowledgePointId: kpId }) }
 }
 
 request.common = {

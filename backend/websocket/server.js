@@ -8,7 +8,14 @@ function initWebSocketServer(server) {
 
   wss.on('connection', (socket, req) => {
     const url = new URL(req.url, 'http://localhost');
-    const userId = url.searchParams.get('userId') || '';
+    let userId;
+    try {
+      const { tokenFrom, getSecret } = require('../middleware/access');
+      const decoded = require('jsonwebtoken').verify(tokenFrom(req) || '', getSecret(), { algorithms: ['HS256'] });
+      const user = require('../database/memory-db').data.users.find(item => item.id === decoded.userId);
+      if (!user || (user.tokenVersion || 0) !== (decoded.tokenVersion || 0)) throw new Error('invalid session');
+      userId = user.id;
+    } catch { socket.close(1008, '请重新登录'); return; }
     if (userId) {
       if (!clients.has(userId)) clients.set(userId, new Set());
       clients.get(userId).add(socket);

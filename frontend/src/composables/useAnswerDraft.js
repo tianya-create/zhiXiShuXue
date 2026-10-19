@@ -38,15 +38,8 @@ export function useAnswerDraft(key, answers, questions, images = ref([])) {
     try {
       await api.put("/student/drafts/" + encodeURIComponent(unref(key)), data);
       status.value = "草稿已保存，可刷新或稍后继续";
-    } catch (error) {
-      if (error && error.response && error.response.status === 409) {
-        // 这份草稿对应的练习/作业已经交卷，换一个提交编号再存一次
-        requestId.value = crypto.randomUUID();
-        status.value = "上一份草稿已交卷，已开始新的作答";
-        again = true;
-      } else {
-        status.value = "暂未同步，草稿已保存在本机";
-      }
+    } catch {
+      status.value = "暂未同步，草稿已保存在本机";
     } finally {
       saving = false;
       if (again) {

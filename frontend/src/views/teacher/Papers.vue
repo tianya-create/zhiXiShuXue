@@ -2,7 +2,7 @@
   <div class="paper-management">
     <div class="page-header">
       <h2>试卷管理</h2>
-      <p>上传和管理试卷</p>
+      <p>上传纸质试卷的图片或 PDF，也可以直接从题库组卷。</p>
     </div>
     
     <el-card class="gradient-card">
@@ -78,7 +78,7 @@
         ref="questionFormRef"
         :model="questionForm"
         :rules="questionRules"
-        label-width="80px"
+        label-width="104px"
       >
         <el-form-item label="题目类型" prop="type">
           <el-select v-model="questionForm.type" placeholder="请选择题型">

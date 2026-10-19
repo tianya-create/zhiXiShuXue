@@ -100,17 +100,13 @@ function difficultyRank(level) { return level === 'easy' ? 1 : level === 'medium
 function getStudentId(id) { const s = db.findById('students', id) || db.findOne('students', { userId: id }); return s ? s.id : id; }
 function getKnowledgePoint(id) { return db.findById('knowledgePoints', id) || KNOWLEDGE_GRAPH.find(item => item.id === id) || null; }
 
-// 知识点静态数据只需同步一次；每次调用都全量 update 会造成大量无谓的持久化写
-let knowledgeGraphSynced = false;
 function ensureKnowledgeGraph() {
-  if (knowledgeGraphSynced) return;
   ['studentKnowledgeProfiles', 'studentQuestionAttempts', 'wrongQuestionRecords', 'recommendationLogs'].forEach(ensureCollection);
   KNOWLEDGE_GRAPH.forEach((item) => {
     const payload = { ...item, category: 'junior-math' };
     const existed = db.findById('knowledgePoints', item.id);
     existed ? db.updateById('knowledgePoints', item.id, payload) : db.create('knowledgePoints', payload);
   });
-  knowledgeGraphSynced = true;
 }
 
 function buildQuestion(topic, type, difficulty, seed) {

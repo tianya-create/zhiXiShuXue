@@ -94,21 +94,31 @@ function buildChoiceDisplay(question, rawAnswer) {
   return info.content || info.label || '-';
 }
 
-// 判断题的口语化写法先归一到标准表述，再走等价判定
 function normalizeJudge(value) {
-  const text = String(value || '').replace(/\s/g, '').toLowerCase();
-  if (['正确', '对', '√', 'true', 't', '1', 'yes', '是'].includes(text)) return '正确';
-  if (['错误', '错', '×', 'x', 'false', 'f', '0', 'no', '否'].includes(text)) return '错误';
+  const text = String(value || '').trim().toLowerCase();
+  if (!text) return '';
+  if (['对', '正确', 'true', '√', 't', 'yes', '是'].includes(text)) return '正确';
+  if (['错', '错误', 'false', '×', 'x', 'f', 'no', '否'].includes(text)) return '错误';
   return text;
 }
-
-// 难度较高的符号：出现这些符号时，字符串不等就不能断言学生答错
-const AMBIGUOUS_PATTERN = /[√π±\\{},;]|或|(?:sin|cos|tan)|\^\d+\.\d+|\/[^=]*[a-z]/;
 
 function gradeAnswer(question, userAnswer) {
   const type = question.type === 'shortAnswer' ? 'subjective' : question.type;
   const normalizedUserAnswer = String(userAnswer || '').trim();
   const correctAnswer = String(question.answer_text || question.answerText || question.answer || '').trim();
+
+  if (type === 'judge' || type === 'truefalse') {
+    const user = normalizeJudge(normalizedUserAnswer);
+    const standard = normalizeJudge(correctAnswer);
+    const isCorrect = !!user && !!standard && user === standard;
+    return {
+      isCorrect,
+      correctAnswer: standard || correctAnswer,
+      explanation: question.explanation || question.analysis || '',
+      userAnswer: normalizedUserAnswer,
+      similarity: isCorrect ? 1 : 0
+    };
+  }
 
   if (type === 'choice') {
     const normalizedUser = normalizeChoiceAnswer(question, normalizedUserAnswer);
@@ -124,55 +134,29 @@ function gradeAnswer(question, userAnswer) {
   }
 
   if (type !== 'subjective') {
-    if (!normalizedUserAnswer) {
-      return {
-        isCorrect: false,
-        needsReview: false,
-        correctAnswer,
-        explanation: question.explanation || question.analysis || '',
-        userAnswer: normalizedUserAnswer,
-        similarity: 0
-      };
-    }
-    // 先做代数等价判定（1/2 = 0.5、2(x+1) = 2x+2、x=6 与 6=x 等），
-    // 解析器覆盖不到时退化为文本比较，仅当符号可疑时转人工复核。
-    const candidates = [correctAnswer, ...(Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : [])];
-    const comparable = type === 'judge'
-      ? { user: normalizeJudge(normalizedUserAnswer), standard: candidates.map(normalizeJudge) }
-      : { user: normalizedUserAnswer, standard: candidates };
-    const matched = comparable.standard.some((answer) => answer && equivalent(comparable.user, answer));
-    const ambiguous = !matched && AMBIGUOUS_PATTERN.test(comparable.user + comparable.standard.join(''));
-    const needsReview = ambiguous && comparable.user !== comparable.standard[0];
+    const isCorrect = [correctAnswer, ...(question.acceptedAnswers || [])].some(answer => equivalent(normalizedUserAnswer, answer));
+    const needsReview = !isCorrect && /[√π±\\{},;]|或|(?:sin|cos|tan)|\^\d+\.\d+|\/[^=]*[a-z]/.test(normalizedUserAnswer + correctAnswer);
     return {
-      isCorrect: needsReview ? null : matched,
       needsReview,
+      isCorrect: needsReview ? null : isCorrect,
       correctAnswer: needsReview ? '' : correctAnswer,
       explanation: question.explanation || question.analysis || '',
       userAnswer: normalizedUserAnswer,
-      similarity: matched ? 1 : 0
+      similarity: isCorrect ? 1 : 0
     };
   }
 
-  // 解答题只看最终答案不足以判断解题过程：给出相似度建议，但一律交由教师复核。
-  const suggestedCorrect = equivalent(normalizedUserAnswer, correctAnswer);
-  const score = similarity(normalizedUserAnswer, correctAnswer);
-
+  // A correct-looking final answer is insufficient evidence for a proof or a
+  // multi-step solution. The teacher reviews the process and awards step scores.
   return {
-    isCorrect: suggestedCorrect || score >= 0.9,
+    isCorrect: null,
     needsReview: true,
     correctAnswer,
     explanation: question.explanation || question.analysis || '',
     userAnswer: normalizedUserAnswer,
-    suggestedCorrect,
-    similarity: score
+    suggestedCorrect: equivalent(normalizedUserAnswer, correctAnswer),
+    similarity: null
   };
 }
 
-module.exports = {
-  levenshtein,
-  similarity,
-  looksLikeRegex,
-  normalizeChoiceAnswer,
-  buildChoiceDisplay,
-  gradeAnswer
-};
+module.exports = { levenshtein, similarity, looksLikeRegex, normalizeChoiceAnswer, buildChoiceDisplay, gradeAnswer };

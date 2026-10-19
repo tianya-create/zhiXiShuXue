@@ -2,7 +2,7 @@
   <div class="student-assignments">
     <div class="page-header">
       <h2>我的作业</h2>
-      <p>查看和完成作业任务</p>
+      <p>老师布置的作业都在这里。交卷后可以看到红笔批改的结果。</p>
     </div>
     
     <el-card class="gradient-card">
@@ -10,9 +10,9 @@
         <div class="card-header">
           <span>作业列表</span>
           <el-radio-group v-model="filterStatus" @change="loadAssignments">
-            <el-radio-button label="">全部</el-radio-button>
-            <el-radio-button label="pending">待完成</el-radio-button>
-            <el-radio-button label="completed">已完成</el-radio-button>
+            <el-radio-button value="">全部</el-radio-button>
+            <el-radio-button value="pending">待完成</el-radio-button>
+            <el-radio-button value="completed">已完成</el-radio-button>
           </el-radio-group>
         </div>
       </template>
@@ -39,9 +39,10 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="score" label="得分" width="80">
+        <el-table-column prop="score" label="得分" width="90">
           <template #default="scope">
-            {{ scope.row.score !== undefined ? scope.row.score : '-' }}
+            <span v-if="scope.row.submitted && scope.row.score !== undefined" class="hand-score">{{ scope.row.score }}</span>
+            <span v-else class="no-score">-</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="120">
@@ -111,6 +112,18 @@ function formatDate(date) {
   max-width: 100%;
   min-width: 0;
   overflow-x: clip;
+}
+
+.hand-score {
+  font-family: var(--nb-font-hand);
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--nb-red-ink);
+}
+
+.no-score {
+  color: var(--nb-ink-3);
 }
 
 .card-header {

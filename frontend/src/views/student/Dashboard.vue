@@ -1,209 +1,259 @@
 <template>
-  <div class="student-dashboard">
-    <!-- 页面头部 -->
-    <header class="page-header">
-      <div class="header-content">
-        <div class="header-text">
-          <h2>学习工作台</h2>
-          <p>今天是 {{ currentDate }}。先完成待办，再处理薄弱知识点，保持稳定的学习节奏。</p>
-        </div>
-        <div class="header-focus">
-          <span class="focus-badge">当前重点</span>
-          <strong>{{ weakBreakdown.weak }} 个薄弱知识点待处理</strong>
-        </div>
-      </div>
+  <div class="nb-dashboard">
+    <!-- 问候 -->
+    <header class="greeting">
+      <p class="greeting-date">{{ currentDate }}</p>
+      <h1 class="greeting-title">{{ userName }}，{{ greetingWord }}</h1>
     </header>
 
-    <!-- 统计卡片 -->
-    <section class="stats-grid">
-      <div class="stat-card is-gradient">
-        <div class="stat-icon">
-          <el-icon :size="22"><Document /></el-icon>
+    <!-- 今天先做这一件 -->
+    <section class="today" v-loading="loadingWeakPoints || loadingAssignments">
+      <div class="today-label">今天先做这一件</div>
+      <div class="today-body">
+        <div class="today-text">
+          <p class="today-main">{{ nextStep.title }}</p>
+          <p class="today-sub">{{ nextStep.detail }}</p>
         </div>
-        <div class="stat-value">{{ stats.pendingAssignments }}</div>
-        <div class="stat-label">待完成作业</div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon" style="background: var(--info-bg); color: var(--info-color);">
-          <el-icon :size="22"><TrendCharts /></el-icon>
+        <div class="today-actions">
+          <el-button v-if="nextStep.secondaryText" @click="nextStep.secondary()">{{ nextStep.secondaryText }}</el-button>
+          <el-button type="primary" size="large" @click="nextStep.primary()">{{ nextStep.primaryText }}</el-button>
         </div>
-        <div class="stat-value">{{ stats.avgScore }}%</div>
-        <div class="stat-label">平均掌握度</div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon" style="background: var(--danger-bg); color: var(--danger-color);">
-          <el-icon :size="22"><WarningFilled /></el-icon>
-        </div>
-        <div class="stat-value">{{ weakBreakdown.weak }}</div>
-        <div class="stat-label">薄弱知识点</div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon" style="background: var(--success-bg); color: var(--success-color);">
-          <el-icon :size="22"><CircleCheck /></el-icon>
-        </div>
-        <div class="stat-value">{{ weakBreakdown.mastered }}</div>
-        <div class="stat-label">已掌握知识点</div>
       </div>
     </section>
 
-    <!-- 主内容区 -->
-    <div class="dashboard-layout">
-      <!-- 作业列表 -->
-      <el-card class="panel-card" v-loading="loadingAssignments">
-        <template #header>
-          <div class="section-header">
-            <div>
-              <div class="section-title">今日待办作业</div>
-              <div class="section-desc">保留最重要的主流程入口，优先完成近期任务。</div>
-            </div>
-            <el-button type="primary" link class="view-all-link" @click="goToAssignments">查看全部</el-button>
-          </div>
-        </template>
-        <div v-if="pendingAssignments.length" class="assignment-list">
-          <div v-for="item in pendingAssignments" :key="item.id" class="assignment-item">
-            <div class="assignment-info">
-              <div class="assignment-title">{{ item.title }}</div>
-              <div class="assignment-meta">
-                <span><el-icon><Document /></el-icon> {{ item.paperTitle || '未命名试卷' }}</span>
-                <span><el-icon><Collection /></el-icon> {{ item.questionCount || 0 }} 题</span>
-                <span><el-icon><Clock /></el-icon> {{ formatDate(item.deadline) }}</span>
-              </div>
-            </div>
-            <el-button type="primary" @click="startAssignment(item)">开始答题</el-button>
+    <div class="board">
+      <!-- 知识方格 -->
+      <section class="sheet grid-sheet" v-loading="loadingWeakPoints">
+        <div class="sheet-head">
+          <h2 class="sheet-title">知识方格</h2>
+          <div class="legend"><span>尚未测评或样本不足 {{ breakdown.unassessed }}</span>
+            <span class="legend-item is-mastered"><i></i>已掌握 <b class="nb-num">{{ breakdown.mastered }}</b></span>
+            <span class="legend-item is-learning"><i></i>待巩固 <b class="nb-num">{{ breakdown.learning }}</b></span>
+            <span class="legend-item is-weak"><i></i>薄弱 <b class="nb-num">{{ breakdown.weak }}</b></span>
           </div>
         </div>
-        <el-empty v-else-if="!loadingAssignments" description="当前没有待完成作业，继续保持。" />
-      </el-card>
+        <p class="sheet-note">
+          每个知识点一格，格子涂得越满掌握得越好。整体平均掌握度
+          <b class="nb-num avg">{{ averageMastery === null ? '尚未测评' : averageMastery + '%' }}</b>。点一格就能开始练习。
+        </p>
 
-      <!-- 侧边栏 -->
-      <div class="side-column">
-        <!-- 知识诊断 -->
-        <el-card class="panel-card" v-loading="loadingWeakPoints">
-          <template #header>
-            <div class="section-header">
-              <div>
-                <div class="section-title">知识诊断概览</div>
-                <div class="section-desc">用更清晰的状态分层，快速判断接下来该做什么。</div>
-              </div>
-            </div>
-          </template>
-          <div class="mastery-breakdown">
-            <div class="mastery-item is-weak">
-              <span class="mastery-label">薄弱</span>
-              <strong class="mastery-value">{{ weakBreakdown.weak }}</strong>
-              <small class="mastery-ratio">{{ weakBreakdown.weakRatio }}%</small>
-            </div>
-            <div class="mastery-item is-middle">
-              <span class="mastery-label">待巩固</span>
-              <strong class="mastery-value">{{ weakBreakdown.learning }}</strong>
-              <small class="mastery-ratio">{{ weakBreakdown.learningRatio }}%</small>
-            </div>
-            <div class="mastery-item is-strong">
-              <span class="mastery-label">已掌握</span>
-              <strong class="mastery-value">{{ weakBreakdown.mastered }}</strong>
-              <small class="mastery-ratio">{{ weakBreakdown.masteredRatio }}%</small>
+        <div v-if="groups.length" class="kp-rows">
+          <div v-for="group in groups" :key="group.name" class="kp-row">
+            <div class="kp-row-name" :style="{ '--cat': categoryColor(group.name) }"><i aria-hidden="true"></i>{{ group.name }}</div>
+            <div class="kp-tiles">
+              <button
+                v-for="item in group.items"
+                :key="item.id"
+                type="button"
+                :class="['kp-tile', 'is-' + item.status]"
+                :style="{ '--fill': (item.mastery || 0) + '%' }"
+                :disabled="!item.eligible"
+                :aria-label="item.name + '，' + item.label + (item.mastery === null ? '' : '，参考掌握度 ' + item.mastery + '%') + (item.eligible ? '，点击开始练习' : '，尚未加入已学范围')"
+                @click="practice(item)"
+              >
+                <span class="kp-name">{{ item.name }}</span>
+                <span class="kp-foot">
+                  <span class="kp-mark" aria-hidden="true">{{ item.mark }}</span>
+                  <span class="kp-rate nb-num">{{ item.mastery === null ? item.label : item.mastery + '%' }}</span>
+                </span>
+              </button>
             </div>
           </div>
-          <div id="knowledgeChart" class="knowledge-chart"></div>
-        </el-card>
+        </div>
+        <el-empty v-else-if="!loadingWeakPoints" description="还没有答题记录。做一份作业或一组练习后，这里会填上颜色。" />
+      </section>
 
-        <!-- 快捷入口 -->
-        <el-card class="panel-card">
-          <template #header>
-            <div>
-              <div class="section-title">快捷入口</div>
-              <div class="section-desc">减少彩色拼盘感，只保留三个高频动作。</div>
-            </div>
-          </template>
-          <div class="quick-actions">
-            <button class="quick-action" type="button" @click="goToKnowledge">
-              <div class="quick-action-icon">
-                <el-icon><Share /></el-icon>
-              </div>
-              <div class="quick-action-text">
-                <div class="quick-action-title">知识诊断中心</div>
-                <div class="quick-action-desc">查看知识树与当前聚焦知识点</div>
-              </div>
-              <el-icon class="quick-action-arrow"><ArrowRight /></el-icon>
-            </button>
-
-            <button class="quick-action" type="button" @click="goToWeakPoints">
-              <div class="quick-action-icon">
-                <el-icon><TrendCharts /></el-icon>
-              </div>
-              <div class="quick-action-text">
-                <div class="quick-action-title">进入薄弱补练</div>
-                <div class="quick-action-desc">针对未掌握内容继续专项练习</div>
-              </div>
-              <el-icon class="quick-action-arrow"><ArrowRight /></el-icon>
-            </button>
-
-            <button class="quick-action" type="button" @click="goToWrongQuestions">
-              <div class="quick-action-icon">
-                <el-icon><Edit /></el-icon>
-              </div>
-              <div class="quick-action-text">
-                <div class="quick-action-title">打开错题本</div>
-                <div class="quick-action-desc">复盘错误并进入重做模式</div>
-              </div>
-              <el-icon class="quick-action-arrow"><ArrowRight /></el-icon>
-            </button>
+      <div class="side"><ReviewPlan />
+        <!-- 作业 -->
+        <section class="sheet" v-loading="loadingAssignments">
+          <div class="sheet-head">
+            <h2 class="sheet-title">待交作业</h2>
+            <el-button link type="primary" @click="go('/student/assignments')">全部作业</el-button>
           </div>
-        </el-card>
+          <ul v-if="pendingAssignments.length" class="homework">
+            <li v-for="item in pendingAssignments" :key="item.id" class="homework-item">
+              <div class="homework-info">
+                <span class="homework-title">{{ item.title }}</span>
+                <span class="homework-meta">{{ item.questionCount || 0 }} 题，{{ formatDeadline(item.deadline) }}</span>
+              </div>
+              <el-button size="small" type="primary" @click="go('/student/assignment/' + item.id)">开始答题</el-button>
+            </li>
+          </ul>
+          <p v-else-if="!loadingAssignments" class="side-empty">作业都交了。</p>
+        </section>
+
+        <!-- 错题本 -->
+        <section class="sheet wrong-sheet">
+          <div class="sheet-head">
+            <h2 class="sheet-title">错题本</h2>
+          </div>
+          <div class="wrong-count">
+            <span class="nb-num wrong-number">{{ wrongStats.unmasteredCount }}</span>
+            <span class="wrong-text">{{ wrongStats.unmasteredCount ? '道错题还没订正' : '道待订正的错题，保持住' }}</span>
+          </div>
+          <div class="side-links">
+            <el-button @click="go('/student/wrong-questions')">打开错题本</el-button>
+            <el-button link type="primary" @click="go('/student/learning-track')">看学习轨迹</el-button>
+          </div>
+        </section>
       </div>
     </div>
-
-    <!-- 艾宾浩斯复习计划：按遗忘曲线提醒今天该复习的题 -->
-    <ReviewPlan class="dashboard-review-plan" />
   </div>
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import api from '@/utils/api'
-import * as echarts from 'echarts'
 import dayjs from 'dayjs'
-import { getMasteryStatus } from '@/utils/knowledge-meta'
+import api from '@/utils/api'
 import ReviewPlan from '@/components/ReviewPlan.vue'
+import { NB_CATEGORY } from '@/utils/notebook-colors'
+import { KNOWLEDGE_TREE_SHARED_CONFIG, inferMajorCategory, normalizeStatusLabel, parseMasteryRate } from '@/utils/knowledge-meta'
 
 const router = useRouter()
-let chart = null
 const loadingAssignments = ref(false)
 const loadingWeakPoints = ref(false)
 const pendingAssignments = ref([])
 const weakPointList = ref([])
-const currentDate = computed(() => dayjs().format('YYYY年MM月DD日 dddd'))
-const stats = reactive({ pendingAssignments: 0, avgScore: 0 })
+const wrongStats = ref({ unmasteredCount: 0 })
 
-const weakBreakdown = computed(() => {
-  const result = { mastered: 0, learning: 0, weak: 0, masteredRatio: 0, learningRatio: 0, weakRatio: 0 }
-  weakPointList.value.forEach((item) => {
-    const status = item.statusLabel || (getMasteryStatus(item.masteryRate) === 'mastered' ? '已掌握' : getMasteryStatus(item.masteryRate) === 'learning' ? '待巩固' : '薄弱')
-    if (status === '已掌握') result.mastered += 1
-    else if (status === '待巩固') result.learning += 1
-    else result.weak += 1
+const STATUS_KEY = { 已掌握: 'mastered', 待巩固: 'learning', 薄弱: 'weak' }
+const STATUS_MARK = { mastered: '✓', learning: '', weak: '✗' }
+const CATEGORY_ORDER = KNOWLEDGE_TREE_SHARED_CONFIG.categories.map(item => item.name)
+
+const userName = computed(() => {
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    return user.name || '同学'
+  } catch (e) {
+    return '同学'
+  }
+})
+
+const currentDate = computed(() => dayjs().format('M月D日 dddd'))
+const greetingWord = computed(() => {
+  const hour = dayjs().hour()
+  if (hour < 6) return '夜深了，早点休息'
+  if (hour < 11) return '早上好'
+  if (hour < 14) return '中午好'
+  if (hour < 18) return '下午好'
+  return '晚上好'
+})
+
+const knowledgeItems = computed(() => weakPointList.value.map((item) => {
+  const mastery = item.masteryRate === null ? null : parseMasteryRate(item.masteryRate)
+  const label = normalizeStatusLabel(item.statusLabel, mastery)
+  const status = STATUS_KEY[label] || 'unassessed'
+  return {
+    eligible: item.eligible,
+    id: item.id,
+    name: item.name,
+    mastery,
+    label,
+    status,
+    mark: STATUS_MARK[status],
+    category: inferMajorCategory(item, '数与式')
+  }
+}))
+
+const groups = computed(() => {
+  const map = {}
+  knowledgeItems.value.forEach((item) => {
+    if (!map[item.category]) map[item.category] = []
+    map[item.category].push(item)
   })
-  const total = weakPointList.value.length || 1
-  result.masteredRatio = Math.round(result.mastered / total * 100)
-  result.learningRatio = Math.round(result.learning / total * 100)
-  result.weakRatio = Math.round(result.weak / total * 100)
+  const ordered = CATEGORY_ORDER.concat(Object.keys(map).filter(name => !CATEGORY_ORDER.includes(name)))
+  return ordered
+    .filter(name => map[name] && map[name].length)
+    .map(name => ({ name, items: map[name] }))
+})
+
+const breakdown = computed(() => {
+  const result = { mastered: 0, learning: 0, weak: 0, unassessed: 0 }
+  knowledgeItems.value.forEach((item) => { result[item.status] += 1 })
   return result
 })
+
+const averageMastery = computed(() => {
+  const list = knowledgeItems.value.filter(item => item.mastery !== null)
+  if (!list.length) return null
+  return Math.round(list.reduce((sum, item) => sum + item.mastery, 0) / list.length)
+})
+
+const weakest = computed(() => {
+  return knowledgeItems.value
+    .filter(item => item.eligible && item.mastery !== null && item.status !== 'mastered')
+    .sort((a, b) => a.mastery - b.mastery)[0] || null
+})
+
+// 首页只给一个明确的下一步：先交作业，其次补最薄弱的知识点
+const nextStep = computed(() => {
+  const homework = pendingAssignments.value[0]
+  if (homework) {
+    return {
+      title: `先完成作业「${homework.title}」`,
+      detail: `${homework.questionCount || 0} 道题，${formatDeadline(homework.deadline)}。`,
+      primaryText: '开始答题',
+      primary: () => go('/student/assignment/' + homework.id),
+      secondaryText: weakest.value ? '先补薄弱点' : '',
+      secondary: () => practice(weakest.value)
+    }
+  }
+  if (weakest.value) {
+    return {
+      title: `补一补「${weakest.value.name}」`,
+      detail: `它是你现在掌握度最低的知识点，参考掌握度为 ${weakest.value.mastery}%。继续练习不同题目，样本充足后再判断掌握情况。`,
+      primaryText: '开始练习',
+      primary: () => practice(weakest.value),
+      secondaryText: '看它的前置知识',
+      secondary: () => go('/student/knowledge')
+    }
+  }
+  if (knowledgeItems.value.length && knowledgeItems.value.every(item => item.status === 'mastered')) {
+    return {
+      title: '所有知识点都达标了',
+      detail: '去错题本把以前做错的题再做一遍，巩固一下。',
+      primaryText: '打开错题本',
+      primary: () => go('/student/wrong-questions'),
+      secondaryText: '',
+      secondary: () => {}
+    }
+  }
+  return {
+    title: '从第一份练习开始',
+    detail: '尚未测评的知识点不会判定薄弱。先完成老师布置的作业，或练习班级已经学过的内容。',
+    primaryText: '去知识图谱',
+    primary: () => go('/student/knowledge'),
+    secondaryText: '',
+    secondary: () => {}
+  }
+})
+
+function go(path) { router.push(path) }
+
+function categoryColor(name) { return NB_CATEGORY[name] || 'var(--nb-blue)' }
+
+function practice(item) {
+  if (!item) return
+  router.push({ path: '/student/practice', query: { kpId: item.id } })
+}
+
+function formatDeadline(date) {
+  if (!date) return '没有截止时间'
+  const d = dayjs(date)
+  const days = d.startOf('day').diff(dayjs().startOf('day'), 'day')
+  if (days < 0) return '已过截止时间'
+  if (days === 0) return '今天 ' + d.format('HH:mm') + ' 截止'
+  if (days === 1) return '明天 ' + d.format('HH:mm') + ' 截止'
+  return d.format('M月D日') + ' 截止'
+}
 
 function loadAssignments() {
   loadingAssignments.value = true
   api.get('/student/assignments', { status: 'pending' }).then((res) => {
-    if (res.success) {
-      pendingAssignments.value = (res.data || []).slice(0, 5)
-      stats.pendingAssignments = (res.data || []).length
-    }
+    if (res.success) pendingAssignments.value = (res.data || []).slice(0, 4)
   }).catch(() => {
     pendingAssignments.value = []
-    stats.pendingAssignments = 0
   }).finally(() => {
     loadingAssignments.value = false
   })
@@ -212,592 +262,396 @@ function loadAssignments() {
 function loadWeakPoints() {
   loadingWeakPoints.value = true
   api.get('/student/weak-points').then((res) => {
-    if (res.success) {
-      weakPointList.value = res.data || []
-      stats.avgScore = getAverageMastery(weakPointList.value)
-      return nextTick()
-    }
-    return null
-  }).then(() => renderChart()).catch(() => {
+    if (res.success) weakPointList.value = res.data || []
+  }).catch(() => {
     weakPointList.value = []
-    stats.avgScore = 0
   }).finally(() => {
     loadingWeakPoints.value = false
   })
 }
 
-function getAverageMastery(list) {
-  if (!list.length) return 0
-  return Math.round(list.reduce((sum, item) => sum + parseInt(item.masteryRate || 0, 10), 0) / list.length)
+function loadWrongStats() {
+  api.get('/student/wrong-questions/stats').then((res) => {
+    if (res.success && res.data) wrongStats.value = res.data
+  }).catch(() => {})
 }
 
-function renderChart() {
-  const chartDom = document.getElementById('knowledgeChart')
-  if (!chartDom) return
-  if (chart) chart.dispose()
-  chart = echarts.init(chartDom)
-  chart.setOption({
-    tooltip: { trigger: 'item' },
-    series: [{
-      type: 'pie',
-      radius: ['56%', '74%'],
-      label: { color: '#78716C', fontSize: 12 },
-      data: [
-        { value: Math.max(weakBreakdown.value.mastered, 1), name: '已掌握', itemStyle: { color: '#059669' } },
-        { value: Math.max(weakBreakdown.value.learning, 1), name: '待巩固', itemStyle: { color: '#D97706' } },
-        { value: Math.max(weakBreakdown.value.weak, 1), name: '薄弱', itemStyle: { color: '#DC2626' } }
-      ]
-    }]
-  })
-}
-
-function goToAssignments() { router.push('/student/assignments') }
-function goToKnowledge() { router.push('/student/knowledge') }
-function goToWeakPoints() { router.push('/student/weak-points') }
-function goToWrongQuestions() { router.push('/student/wrong-questions') }
-function startAssignment(row) { router.push('/student/assignment/' + row.id) }
-function formatDate(date) { return date ? dayjs(date).format('MM-DD HH:mm') : '未设置' }
-
-onMounted(() => { loadAssignments(); loadWeakPoints(); window.addEventListener('resize', renderChart) })
-onBeforeUnmount(() => { window.removeEventListener('resize', renderChart); if (chart) chart.dispose() })
+onMounted(() => {
+  loadAssignments()
+  loadWeakPoints()
+  loadWrongStats()
+})
 </script>
 
 <style scoped>
-.student-dashboard {
-  padding: 0;
+.nb-dashboard {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 28px;
 }
 
-/* === 页面头部 === */
-.page-header {
-  background: var(--surface-overlay);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-radius: var(--radius-xl);
-  padding: 32px 36px;
-  border: 1px solid hsla(0, 0%, 100%, 0.9);
-  box-shadow: var(--shadow-md);
-  position: relative;
-  overflow: hidden;
-  animation: slideUp var(--duration-slow) var(--ease-spring);
+/* ---------- 问候 ---------- */
+.greeting-date {
+  margin: 0 0 6px;
+  color: var(--nb-ink-3);
+  font-size: 14px;
 }
 
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.page-header::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: var(--brand-gradient);
-}
-
-.page-header::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 300px;
-  height: 100%;
-  background: radial-gradient(ellipse at top right, hsla(var(--brand-hue), 84%, 68%, 0.06) 0%, transparent 70%);
-  pointer-events: none;
-}
-
-.header-content {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 32px;
-  position: relative;
-  z-index: 1;
-}
-
-.header-text h2 {
-  font-family: 'Noto Serif SC', serif;
-  font-size: 26px;
-  font-weight: 700;
-  color: var(--text-primary);
+.greeting-title {
   margin: 0;
+  font-family: var(--nb-font-display);
+  font-weight: 400;
+  font-size: clamp(30px, 3.4vw, 40px);
+  line-height: 1.2;
+  color: var(--nb-ink);
   letter-spacing: 0.02em;
 }
 
-.header-text p {
-  margin: 12px 0 0;
-  color: var(--text-secondary);
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.header-focus {
-  flex-shrink: 0;
-  padding: 20px 24px;
-  background: hsla(var(--brand-hue), 84%, 68%, 0.06);
-  border-radius: var(--radius-lg);
-  border: 1px solid hsla(var(--brand-hue), 84%, 68%, 0.12);
-  text-align: center;
-  transition: all var(--duration-normal) var(--ease-spring);
-}
-
-.header-focus:hover {
-  transform: scale(1.02);
-  box-shadow: var(--shadow-md);
-  border-color: hsla(var(--brand-hue), 84%, 68%, 0.2);
-}
-
-.focus-badge {
-  display: inline-block;
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--primary-500);
-  background: var(--surface-raised);
-  padding: 5px 12px;
-  border-radius: var(--radius-full);
-  margin-bottom: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  box-shadow: var(--shadow-sm);
-}
-
-.header-focus strong {
-  display: block;
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-top: 8px;
-}
-
-/* === 统计卡片网格 === */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
-}
-
-.stat-card {
-  padding: 24px;
-  border-radius: var(--radius-xl);
-  background: var(--surface-raised);
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-sm);
-  transition: all var(--duration-normal) var(--ease-spring);
+/* ---------- 今天先做这一件 ---------- */
+.today {
   position: relative;
-  overflow: hidden;
-  animation: cardEnter var(--duration-slow) var(--ease-spring) backwards;
+  padding: 22px 26px 24px;
+  background: var(--nb-sheet);
+  border: 1px solid var(--nb-line);
+  border-radius: var(--nb-radius);
+  box-shadow: var(--nb-shadow);
 }
 
-.stat-card:nth-child(1) { animation-delay: 0.05s; }
-.stat-card:nth-child(2) { animation-delay: 0.1s; }
-.stat-card:nth-child(3) { animation-delay: 0.15s; }
-.stat-card:nth-child(4) { animation-delay: 0.2s; }
-
-@keyframes cardEnter {
-  from { opacity: 0; transform: translateY(16px) scale(0.97); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-.stat-card::before {
+.today::before {
   content: '';
   position: absolute;
-  top: 0;
   left: 0;
+  top: 18px;
+  bottom: 18px;
   width: 4px;
-  height: 100%;
-  background: var(--brand-gradient);
-  opacity: 0;
-  transition: opacity var(--duration-normal);
+  border-radius: 0 4px 4px 0;
+  background: var(--nb-red);
 }
 
-.stat-card::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 100px;
-  height: 100px;
-  background: radial-gradient(circle at top right, hsla(var(--brand-hue), 84%, 68%, 0.04) 0%, transparent 70%);
-  pointer-events: none;
-}
-
-.stat-card:hover {
-  transform: translateY(-6px);
-  box-shadow: var(--shadow-lg);
-  border-color: hsla(var(--brand-hue), 84%, 68%, 0.2);
-}
-
-.stat-card:hover::before { opacity: 1; }
-
-.stat-card .stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--primary-50);
-  color: var(--primary-500);
-  margin-bottom: 18px;
-  transition: all var(--duration-normal) var(--ease-spring);
-}
-
-.stat-card:hover .stat-icon {
-  transform: scale(1.1) rotate(-5deg);
-}
-
-.stat-card .stat-value {
-  font-size: 36px;
-  font-weight: 800;
-  color: var(--text-primary);
-  font-family: 'Noto Serif SC', serif;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-}
-
-.stat-card .stat-label {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin-top: 8px;
-  font-weight: 600;
-}
-
-.stat-card.is-gradient {
-  background: var(--brand-gradient);
-  border: none;
-}
-
-.stat-card.is-gradient .stat-icon {
-  background: hsla(0, 0%, 100%, 0.2);
-  color: white;
-}
-
-.stat-card.is-gradient .stat-value,
-.stat-card.is-gradient .stat-label {
-  color: var(--text-primary);
-}
-
-.stat-card.is-gradient .stat-label {
-  color: var(--text-secondary);
-}
-
-.stat-card.is-gradient::before { opacity: 0; }
-.stat-card.is-gradient:hover::before { opacity: 1; }
-
-/* === 主内容布局 === */
-.dashboard-layout {
-  display: grid;
-  grid-template-columns: 1fr 380px;
-  gap: 24px;
-  animation: slideUp var(--duration-slow) var(--ease-spring);
-  animation-delay: 0.2s;
-  animation-fill-mode: backwards;
-}
-
-.side-column {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-/* === 面板卡片 === */
-.panel-card {
-  border-radius: var(--radius-xl) !important;
-  border: 1px solid var(--border-subtle) !important;
-  box-shadow: var(--shadow-sm) !important;
-  transition: all var(--duration-normal) var(--ease-spring) !important;
-  background: var(--surface-raised);
-}
-
-.panel-card:hover {
-  box-shadow: var(--shadow-lg) !important;
-  transform: translateY(-2px);
-}
-
-.section-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 4px 0;
-}
-
-.section-title {
+.today-label {
+  font-family: var(--nb-font-display);
   font-size: 17px;
+  color: var(--nb-red-ink);
+  letter-spacing: 0.04em;
+}
+
+.today-body {
+  margin-top: 8px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.today-text {
+  flex: 1 1 380px;
+  min-width: 0;
+}
+
+.today-main {
+  margin: 0;
+  font-size: 24px;
   font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: 0.01em;
+  line-height: 1.4;
+  color: var(--nb-ink);
 }
 
-.section-desc {
-  margin-top: 6px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.6;
-  font-weight: 500;
+.today-sub {
+  margin: 6px 0 0;
+  max-width: 56ch;
+  color: var(--nb-ink-2);
+  font-size: 15px;
+  line-height: 1.7;
 }
 
-.section-header :deep(.view-all-link.el-button--primary.is-link),
-.section-header :deep(.view-all-link.el-button--primary.is-link:hover),
-.section-header :deep(.view-all-link.el-button--primary.is-link:focus) {
-  color: #fff !important;
+.today-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-/* === 作业列表 === */
-.assignment-list {
+/* ---------- 版面 ---------- */
+.board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  align-items: start;
+}
+
+.side {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 24px;
 }
 
-.assignment-item {
+.sheet {
+  padding: 20px 22px 22px;
+  background: var(--nb-sheet);
+  border: 1px solid var(--nb-line);
+  border-radius: var(--nb-radius);
+  box-shadow: var(--nb-shadow);
+}
+
+.sheet-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  padding: 20px 24px;
-  border-radius: var(--radius-lg);
-  border: 1.5px solid var(--border-subtle);
-  background: var(--surface-muted);
-  transition: all var(--duration-normal) var(--ease-spring);
-  cursor: pointer;
-}
-
-.assignment-item:hover {
-  border-color: hsla(var(--brand-hue), 84%, 68%, 0.3);
-  background: var(--surface-raised);
-  transform: translateX(6px);
-  box-shadow: var(--shadow-md);
-}
-
-.assignment-info { flex: 1; min-width: 0; }
-
-.assignment-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-}
-
-.assignment-meta {
-  display: flex;
+  gap: 12px;
   flex-wrap: wrap;
-  gap: 16px;
-  color: var(--text-muted);
-  font-size: 13px;
 }
 
-.assignment-meta span {
+.sheet-title {
+  margin: 0;
+  font-family: var(--nb-font-display);
+  font-weight: 400;
+  font-size: 22px;
+  color: var(--nb-ink);
+}
+
+.sheet-note {
+  margin: 8px 0 18px;
+  color: var(--nb-ink-2);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.sheet-note .avg {
+  color: var(--nb-ink);
+  font-size: 16px;
+}
+
+/* ---------- 图例 ---------- */
+.legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 14px;
+  color: var(--nb-ink-2);
+}
+
+.legend-item {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-weight: 500;
+  gap: 6px;
 }
 
-/* === 知识掌握度 === */
-.mastery-breakdown {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  margin-bottom: 24px;
+.legend-item i {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1.5px solid var(--c);
+  background: var(--c-soft);
 }
 
-.mastery-item {
-  padding: 20px 16px;
-  border-radius: var(--radius-lg);
-  text-align: center;
-  transition: all var(--duration-normal) var(--ease-spring);
-  position: relative;
-  overflow: hidden;
+.legend-item b {
+  color: var(--nb-ink);
 }
 
-.mastery-item::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  opacity: 0;
-  transition: opacity var(--duration-normal);
-}
+.is-mastered { --c: var(--nb-green); --c-ink: var(--nb-green-ink); --c-soft: var(--nb-green-soft); }
+.is-learning { --c: var(--nb-orange); --c-ink: var(--nb-orange-ink); --c-soft: var(--nb-orange-soft); }
+.is-weak { --c: var(--nb-red); --c-ink: var(--nb-red-ink); --c-soft: var(--nb-red-soft); }
 
-.mastery-item:hover { transform: scale(1.03); }
-.mastery-item:hover::before { opacity: 1; }
-
-.mastery-item.is-weak {
-  background: var(--danger-bg);
-  border: 1px solid hsla(var(--danger-hue), 84%, 60%, 0.15);
-}
-.mastery-item.is-weak::before { background: var(--brand-gradient); }
-.mastery-item.is-middle {
-  background: var(--warning-bg);
-  border: 1px solid hsla(var(--warning-hue), 90%, 50%, 0.15);
-}
-.mastery-item.is-middle::before { background: var(--brand-gradient); }
-.mastery-item.is-strong {
-  background: var(--success-bg);
-  border: 1px solid hsla(var(--success-hue), 90%, 45%, 0.15);
-}
-.mastery-item.is-strong::before { background: var(--brand-gradient); }
-
-.mastery-label {
-  display: block;
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-bottom: 8px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.mastery-value {
-  display: block;
-  font-size: 28px;
-  font-weight: 800;
-  color: var(--text-primary);
-  font-family: 'Noto Serif SC', serif;
-}
-
-.mastery-ratio {
-  display: block;
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-top: 6px;
-  font-weight: 600;
-}
-
-.knowledge-chart {
-  height: 220px;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-
-/* === 快捷入口 === */
-.quick-actions {
+/* ---------- 知识方格 ---------- */
+.kp-rows {
   display: flex;
   flex-direction: column;
+  gap: 14px;
+}
+
+.kp-row {
+  display: grid;
+  grid-template-columns: 124px minmax(0, 1fr);
   gap: 12px;
+  align-items: start;
 }
 
-.quick-action {
+.kp-row-name {
   display: flex;
   align-items: center;
-  gap: 16px;
-  width: 100%;
-  padding: 18px 20px;
-  border: 1.5px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--surface-muted);
-  cursor: pointer;
-  transition: all var(--duration-normal) var(--ease-spring);
-  text-align: left;
-  position: relative;
-  overflow: hidden;
-}
-
-.quick-action::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 4px;
-  height: 100%;
-  background: var(--brand-gradient);
-  opacity: 0;
-  transition: opacity var(--duration-normal);
-}
-
-.quick-action:hover {
-  border-color: hsla(var(--brand-hue), 84%, 68%, 0.3);
-  background: var(--surface-raised);
-  transform: translateX(6px);
-  box-shadow: var(--shadow-md);
-}
-
-.quick-action:hover::before { opacity: 1; }
-
-.quick-action-icon {
-  width: 46px;
-  height: 46px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--primary-50);
-  color: var(--primary-500);
-  flex-shrink: 0;
-  transition: all var(--duration-normal) var(--ease-spring);
-}
-
-.quick-action:nth-child(1) .quick-action-icon {
-  background: linear-gradient(135deg, rgba(45, 142, 232, 0.1), rgba(52, 199, 193, 0.14));
-  color: #2488dd;
-}
-
-.quick-action:nth-child(2) .quick-action-icon {
-  background: linear-gradient(135deg, rgba(52, 199, 193, 0.14), rgba(143, 222, 220, 0.2));
-  color: #169ca3;
-}
-
-.quick-action:nth-child(3) .quick-action-icon {
-  background: linear-gradient(135deg, rgba(111, 203, 229, 0.14), rgba(229, 250, 255, 0.92));
-  color: #2f8fb8;
-}
-
-.quick-action:hover .quick-action-icon {
-  transform: scale(1.1) rotate(-5deg);
-}
-
-.quick-action-text { flex: 1; min-width: 0; }
-
-.quick-action-title {
+  gap: 8px;
+  padding-top: 12px;
   font-size: 15px;
   font-weight: 700;
-  color: var(--text-primary);
+  color: var(--nb-ink);
 }
 
-.quick-action-desc {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-top: 4px;
-  font-weight: 500;
+.kp-row-name i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--cat);
+  flex-shrink: 0;
 }
 
-.quick-action-arrow {
-  color: var(--text-muted);
-  font-size: 16px;
-  transition: all var(--duration-normal) var(--ease-spring);
+.kp-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 10px;
 }
 
-.quick-action:hover .quick-action-arrow {
-  transform: translateX(6px);
-  color: var(--primary-500);
+.kp-tile.is-unassessed { background: #f1f4f9; color: var(--nb-ink-3); }
+.kp-tile:disabled { cursor: default; opacity: 0.65; }
+.kp-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 76px;
+  padding: 10px 11px 9px;
+  border: 1.5px solid var(--c);
+  border-radius: 8px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: var(--nb-ink);
+  /* 从下往上按掌握度涂色 */
+  background:
+    linear-gradient(to top, var(--c-soft) var(--fill), transparent var(--fill)),
+    var(--nb-sheet);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-/* === 响应式 === */
-@media (max-width: 1200px) {
-  .dashboard-layout { grid-template-columns: 1fr; }
-  .side-column { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.kp-tile.is-weak {
+  border-style: dashed;
 }
 
-@media (max-width: 1024px) {
-  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+.kp-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 -2px var(--c-soft), 0 8px 16px -10px rgba(28, 37, 65, 0.35);
 }
 
-@media (max-width: 768px) {
-  .header-content { flex-direction: column; }
-  .stats-grid { grid-template-columns: 1fr; }
-  .side-column { grid-template-columns: 1fr; }
-  .mastery-breakdown { grid-template-columns: 1fr; }
-  .assignment-item { flex-direction: column; align-items: flex-start; }
-  .assignment-item .el-button { width: 100%; margin-top: 16px; }
+.kp-name {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  word-break: break-all;
 }
-.dashboard-review-plan {
-  margin-top: 20px;
+
+.kp-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.kp-mark {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--c-ink);
+}
+
+.kp-rate {
+  font-size: 15px;
+  color: var(--c-ink);
+}
+
+/* ---------- 作业 ---------- */
+.homework {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+}
+
+.homework-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px dashed var(--nb-line-strong);
+}
+
+.homework-item:first-child {
+  border-top: none;
+  padding-top: 4px;
+}
+
+.homework-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.homework-title {
+  font-weight: 700;
+  color: var(--nb-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.homework-meta {
+  margin-top: 2px;
+  font-size: 14px;
+  color: var(--nb-ink-3);
+}
+
+.side-empty {
+  margin: 14px 0 0;
+  color: var(--nb-ink-3);
+  font-size: 14px;
+}
+
+/* ---------- 错题本 ---------- */
+.wrong-count {
+  margin: 12px 0 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.wrong-number {
+  font-size: 44px;
+  line-height: 1;
+  color: var(--nb-red-ink);
+}
+
+.wrong-text {
+  color: var(--nb-ink-2);
+  font-size: 14px;
+}
+
+.side-links {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ---------- 小屏 ---------- */
+@media (max-width: 1100px) {
+  .board {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .kp-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .kp-row-name {
+    padding-top: 0;
+  }
+
+  .kp-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .today {
+    padding: 18px 18px 20px 22px;
+  }
+
+  .today-main {
+    font-size: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kp-tile:hover {
+    transform: none;
+  }
 }
 </style>

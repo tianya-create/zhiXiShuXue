@@ -18,14 +18,10 @@ function getKnowledgeAttempts(userId, kpCode) {
     .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 }
 
-/**
- * 只计算不落库。样本不足（少于 5 题或少于 3 道不同题）时给出置信度提示，
- * 并且掌握度封顶 79，避免"做了 1 道题就算已掌握"。
- */
 function calculateMastery(userId, kpCode) {
   const attempts = getKnowledgeAttempts(userId, kpCode);
   const latest10 = attempts.slice(-10);
-  const distinctQuestions = new Set(latest10.map((item) => item.questionId).filter(Boolean)).size;
+  const distinctQuestions = new Set(latest10.map(item => item.questionId)).size;
   const sufficient = latest10.length >= 5 && distinctQuestions >= 3;
   const correctRate = latest10.length
     ? latest10.filter((item) => item.isCorrect).length / latest10.length
@@ -48,7 +44,7 @@ function calculateMastery(userId, kpCode) {
   return {
     userId,
     kpCode,
-    mastery: mastery !== null && !sufficient ? Math.min(79, mastery) : mastery,
+    mastery: !sufficient && mastery !== null ? Math.min(79, mastery) : mastery,
     status: !attempts.length ? '尚未测评' : !sufficient ? '样本不足' : getStatus(mastery),
     confidence: sufficient ? 'sufficient' : attempts.length ? 'limited' : 'none',
     distinctQuestions,
@@ -56,12 +52,12 @@ function calculateMastery(userId, kpCode) {
     attemptCount: attempts.length,
     updatedAt: new Date().toISOString()
   };
+
 }
 
 function updateMastery(userId, kpCode) {
   const payload = calculateMastery(userId, kpCode);
   const existing = db.findOne('student_knowledge_mastery', { userId, kpCode });
-
   if (existing) {
     return db.updateById('student_knowledge_mastery', existing.id, payload);
   }

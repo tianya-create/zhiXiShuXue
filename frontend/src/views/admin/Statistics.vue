@@ -2,7 +2,7 @@
   <div class="admin-statistics">
     <div class="page-header">
       <h2>数据统计</h2>
-      <p>系统数据统计和导出</p>
+      <p>平台的用户、题目和答题数据，可以导出成表格。</p>
     </div>
     
     <el-row :gutter="20">
@@ -25,12 +25,17 @@
         <el-card class="gradient-card">
           <template #header>数据导出</template>
           <div class="export-buttons">
-            <el-button type="primary" @click="exportData('users')">导出用户数据</el-button>
-            <el-button type="success" @click="exportData('students')">导出学生数据</el-button>
-            <el-button type="warning" @click="exportData('teachers')">导出教师数据</el-button>
-            <el-button type="info" @click="exportData('classes')">导出班级数据</el-button>
-            <el-button @click="exportData('papers')">导出试卷数据</el-button>
-            <el-button @click="exportData('answers')">导出答题数据</el-button>
+            <button
+              v-for="item in exportItems"
+              :key="item.key"
+              type="button"
+              class="export-tile"
+              :style="{ '--tile': item.color, '--tile-soft': item.soft }"
+              @click="exportData(item.key)"
+            >
+              <span class="export-icon"><el-icon><Download /></el-icon></span>
+              <span class="export-label">{{ item.label }}</span>
+            </button>
           </div>
         </el-card>
         
@@ -43,7 +48,7 @@
               accept=".json"
               :before-upload="restoreData"
             >
-              <el-button type="warning">恢复数据</el-button>
+              <el-button>恢复数据</el-button>
             </el-upload>
           </div>
         </el-card>
@@ -53,6 +58,15 @@
 </template>
 
 <script setup>
+const exportItems = [
+  { key: 'users', label: '用户数据', color: 'var(--nb-blue)', soft: 'var(--nb-blue-soft)' },
+  { key: 'students', label: '学生数据', color: 'var(--nb-purple)', soft: 'var(--nb-purple-soft)' },
+  { key: 'teachers', label: '教师数据', color: 'var(--nb-pink)', soft: 'var(--nb-pink-soft)' },
+  { key: 'classes', label: '班级数据', color: 'var(--nb-teal)', soft: 'var(--nb-teal-soft)' },
+  { key: 'papers', label: '试卷数据', color: 'var(--nb-orange)', soft: 'var(--nb-orange-soft)' },
+  { key: 'answers', label: '答题数据', color: 'var(--nb-green)', soft: 'var(--nb-green-soft)' }
+]
+
 import { reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '@/utils/api'
@@ -156,8 +170,42 @@ function restoreData(file) {
 <style scoped>
 .export-buttons {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.export-tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--tile-soft);
+  border-radius: 12px;
+  background: var(--tile-soft);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--nb-ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.export-tile:hover {
+  border-color: var(--tile);
+  transform: translateY(-1px);
+}
+
+.export-icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--tile);
+  color: #fff;
+  font-size: 18px;
 }
 
 .backup-actions {

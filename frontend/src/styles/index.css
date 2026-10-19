@@ -4,8 +4,7 @@
    ============================================ */
 
 /* === 字体 ===
-   使用系统自带中文字体，不依赖外网字体服务
-   （Google Fonts 在校园网/国内网络下经常加载失败，会拖慢首屏甚至白屏）。 */
+   使用系统自带中文字体，不依赖外网字体服务（Google Fonts 在国内经常无法加载）。 */
 
 /* === 设计令牌 === */
 :root {
@@ -93,10 +92,6 @@
   --duration-normal: 240ms;
   --duration-slow: 400ms;
 }
-
-/* === 暗色模式 ===
-   全站统一使用「方格本」浅色纸张主题，不跟随系统暗色，
-   避免深色底与白色纸张卡片叠加后文字对比度不足。 */
 
 /* === 基础重置 === */
 * {
@@ -819,53 +814,9 @@ button {
   animation: shimmer 2s infinite;
 }
 
-/* === 响应式 === */
-@media (max-width: 1024px) {
-  .sidebar {
-    width: var(--sidebar-collapsed);
-  }
-
-  .sidebar .logo-text,
-  .sidebar .logo-subtitle,
-  .sidebar .menu-text,
-  .sidebar .user-name,
-  .sidebar .user-role {
-    display: none;
-  }
-
-  .sidebar .logo {
-    justify-content: center;
-    padding: 0;
-  }
-
-  .sidebar .user-avatar {
-    justify-content: center;
-    padding: 10px;
-  }
-
-  .main-content {
-    margin-left: var(--sidebar-collapsed);
-  }
-}
-
+/* === 响应式 ===
+   侧边栏在小屏下的抽屉行为写在各个 layouts/*Layout.vue 里 */
 @media (max-width: 768px) {
-  .sidebar {
-    transform: translateX(-100%);
-  }
-
-  .sidebar.is-open {
-    transform: translateX(0);
-  }
-
-  .main-content {
-    margin-left: 0;
-    padding: 16px;
-  }
-
-  .el-dialog {
-    width: 90% !important;
-  }
-
   .page-header {
     padding: 20px;
     border-radius: var(--radius-lg);
@@ -1220,4 +1171,17 @@ body::before {
   background: #b42318 !important;
   color: #ffffff !important;
   box-shadow: 0 10px 20px rgba(180, 35, 24, 0.18) !important;
+}
+
+/* === 小屏下弹窗不超出屏幕 === */
+@media (max-width: 768px) {
+  .el-dialog {
+    width: 94vw !important;
+    max-width: 94vw;
+    margin-top: 6vh !important;
+  }
+
+  .el-message-box {
+    max-width: 92vw;
+  }
 }

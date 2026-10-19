@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { DatabaseSync } = require('node:sqlite');
 
-const DB_PATH = path.join(__dirname, 'questions.sqlite');
+const DB_PATH = path.join(process.env.DATA_DIR || __dirname, 'questions.sqlite');
 const LEGACY_JSON_PATH = path.join(__dirname, 'questions.json');
 
 let database = null;
@@ -10,13 +10,9 @@ let database = null;
 function getDatabase() {
   if (database) return database;
 
-  fs.mkdirSync(__dirname, { recursive: true });
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
   database = new DatabaseSync(DB_PATH);
-  database.exec(`
-    PRAGMA journal_mode = WAL;
-    PRAGMA synchronous = NORMAL;
-    PRAGMA busy_timeout = 5000;
-  `);
+  database.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;');
   database.exec(`
     CREATE TABLE IF NOT EXISTS questions (
       id TEXT PRIMARY KEY,
@@ -146,6 +142,7 @@ function loadQuestionsFromStore(fallbackQuestions = []) {
 }
 
 module.exports = {
+  getDatabase,
   DB_PATH,
   getAllQuestions,
   upsertQuestion,

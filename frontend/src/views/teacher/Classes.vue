@@ -2,7 +2,7 @@
   <div class="class-management">
     <div class="page-header">
       <h2>班级管理</h2>
-      <p>管理您的班级和学生信息</p>
+      <p>建班、改班级信息，看每个班有多少学生。</p>
     </div>
     
     <el-card class="gradient-card">
@@ -25,18 +25,10 @@
             {{ formatDate(scope.row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="已学范围" width="150">
+        <el-table-column label="操作" width="290">
           <template #default="scope">
-            <el-tag v-if="(scope.row.taughtKnowledgePointIds || []).length" size="small" type="success">
-              {{ scope.row.taughtKnowledgePointIds.length }} 个知识点
-            </el-tag>
-            <el-button v-else type="warning" link @click="openCurriculum(scope.row)">待配置</el-button>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="300">
-          <template #default="scope">
+            <el-button type="primary" link @click="curriculum.open(scope.row)">已学范围</el-button>
             <el-button type="primary" link @click="viewStudents(scope.row)">查看学生</el-button>
-            <el-button type="primary" link @click="openCurriculum(scope.row)">教材进度</el-button>
             <el-button type="primary" link @click="editClass(scope.row)">编辑</el-button>
             <el-button type="danger" link @click="deleteClass(scope.row)">删除</el-button>
           </template>
@@ -44,6 +36,7 @@
       </el-table>
     </el-card>
     
+    <ClassCurriculum ref="curriculum" />
     <!-- 添加/编辑班级对话框 -->
     <el-dialog
       v-model="dialogVisible"
@@ -54,7 +47,7 @@
         ref="formRef"
         :model="classForm"
         :rules="rules"
-        label-width="80px"
+        label-width="104px"
       >
         <el-form-item label="班级名称" prop="name">
           <el-input v-model="classForm.name" placeholder="请输入班级名称" />
@@ -72,9 +65,6 @@
         <el-button type="primary" @click="submitForm">确定</el-button>
       </template>
     </el-dialog>
-
-    <!-- 已学范围（教材进度）：决定个性化推荐的边界 -->
-    <ClassCurriculum ref="curriculumRef" />
   </div>
 </template>
 
@@ -85,17 +75,13 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/utils/api'
 import dayjs from 'dayjs'
 import ClassCurriculum from '@/components/ClassCurriculum.vue'
+const curriculum = ref(null)
 
 var router = useRouter()
 var loading = ref(false)
 var dialogVisible = ref(false)
 var isEdit = ref(false)
 var formRef = ref(null)
-var curriculumRef = ref(null)
-
-function openCurriculum(row) {
-  curriculumRef.value.open(row)
-}
 
 var classes = ref([])
 var classForm = reactive({

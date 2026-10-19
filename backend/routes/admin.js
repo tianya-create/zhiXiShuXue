@@ -4,9 +4,7 @@ const multer = require('multer');
 const XLSX = require('xlsx');
 const bcrypt = require('bcryptjs');
 const db = require('../database/memory-db');
-const { normalizeQuestion } = require('../services/question-quality');
 const { ensureManualQuestionBank, getQuestionBankByNode } = require('../services/manual-question-bank');
-const { buildAdminSettingsPayload, getAdminSettingsView, validateRemoteConfig } = require('../services/ai-tutor');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -45,7 +43,7 @@ function buildImportSummary(classes, students, users) {
 // 获取系统配置
 router.get('/settings', (req, res) => {
   try {
-    res.json({ success: true, data: { ...db.data.settings, ...getAdminSettingsView() } });
+    res.json({ success: true, data: db.data.settings });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -76,10 +74,7 @@ router.put('/settings', (req, res) => {
 // 获取知识点列表
 router.get('/knowledge-points', (req, res) => {
   try {
-    // 只返回教材目录节点：早期题库遗留的 kp-xxx 章节不再混进知识点树
-    const knowledgePoints = db.find('knowledgePoints').filter(
-      (kp) => kp.curriculum || kp.isRoot || kp.isCategory
-    );
+    const knowledgePoints = db.find('knowledgePoints');
     
     // 构建树形结构
     const tree = [];
@@ -120,9 +115,7 @@ router.post('/knowledge-points', (req, res) => {
       parentId: parentId || null,
       level: level || 1,
       order: order || 1,
-      description: description || '',
-      // 管理员手工新增的知识点同样属于教材目录，必须带标记才不会被树的过滤条件排除
-      curriculum: true
+      description: description || ''
     });
     
     db.addLog(userId, 'CREATE_KNOWLEDGE_POINT', { kpId: kp.id, name });
@@ -215,9 +208,30 @@ router.get('/questions', (req, res) => {
 router.post('/questions', (req, res) => {
   try {
     const userId = req.headers['x-user-id'];
-    // 题库质量校验：选项唯一性、答案对应、分值范围、评分步骤合计、图片路径
+    const { type, content, options, answer, knowledgePoints, difficulty, score } = req.body;
+    const normalizedOptions = Array.isArray(options)
+      ? options.map(item => String(item || '').trim()).filter(Boolean)
+      : [];
+    const normalizedAnswer = String(answer || '').trim();
+    
+    if (!type || !content) {
+      return res.status(400).json({ success: false, message: '题目类型和内容不能为空' });
+    }
+    if (!normalizedAnswer) {
+      return res.status(400).json({ success: false, message: '答案不能为空' });
+    }
+    if (type === 'choice' && normalizedOptions.length < 2) {
+      return res.status(400).json({ success: false, message: '选择题至少需要两个选项' });
+    }
+    
     const question = db.create('questions', {
-      ...normalizeQuestion(req.body, {}, req.user || { id: req.headers['x-user-id'], role: 'admin' }),
+      type,
+      content,
+      options: normalizedOptions,
+      answer: normalizedAnswer,
+      knowledgePoints: knowledgePoints || [],
+      difficulty: difficulty || 'medium',
+      score: score || 1,
       paperId: null // 题库中的题目不属于任何试卷
     });
     
@@ -225,7 +239,7 @@ router.post('/questions', (req, res) => {
     
     res.json({ success: true, data: question, message: '题目添加成功' });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
@@ -233,11 +247,27 @@ router.post('/questions', (req, res) => {
 router.put('/questions/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const existing = db.findById('questions', id);
-    if (!existing) {
-      return res.status(404).json({ success: false, message: '题目不存在' });
+    const { content, options, answer, knowledgePoints, difficulty, score } = req.body;
+    const normalizedOptions = Array.isArray(options)
+      ? options.map(item => String(item || '').trim()).filter(Boolean)
+      : [];
+    const normalizedAnswer = String(answer || '').trim();
+
+    if (!normalizedAnswer) {
+      return res.status(400).json({ success: false, message: '答案不能为空' });
     }
-    const updated = db.updateById('questions', id, normalizeQuestion(req.body, existing, req.user || { id: req.headers['x-user-id'], role: 'admin' }));
+    if (normalizedOptions.length > 0 && normalizedOptions.length < 2) {
+      return res.status(400).json({ success: false, message: '选择题至少需要两个选项' });
+    }
+    
+    const updated = db.updateById('questions', id, {
+      content,
+      options: normalizedOptions,
+      answer: normalizedAnswer,
+      knowledgePoints,
+      difficulty,
+      score
+    });
     
     if (!updated) {
       return res.status(404).json({ success: false, message: '题目不存在' });
@@ -245,33 +275,7 @@ router.put('/questions/:id', (req, res) => {
     
     res.json({ success: true, data: updated, message: '题目更新成功' });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
-  }
-});
-
-// 审核题目：通过前必须有解析，修改过的题目会重新回到待审核
-router.post('/questions/:id/review', (req, res) => {
-  try {
-    const existing = db.findById('questions', req.params.id);
-    if (!existing) {
-      return res.status(404).json({ success: false, message: '题目不存在' });
-    }
-    if (req.user && req.user.role === 'teacher' && existing.createdBy && existing.createdBy !== req.user.id) {
-      return res.status(403).json({ success: false, message: '只能审核自己录入的题目' });
-    }
-    const status = req.body.reviewStatus;
-    if (!['approved', 'pending', 'withdrawn'].includes(status)) {
-      return res.status(400).json({ success: false, message: '审核状态无效' });
-    }
-    const saved = db.updateById(
-      'questions',
-      existing.id,
-      normalizeQuestion({ ...existing, reviewStatus: status }, existing, req.user || { id: existing.createdBy, role: 'admin' })
-    );
-    db.addLog((req.user && req.user.id) || existing.createdBy, 'REVIEW_QUESTION', { questionId: existing.id, reviewStatus: status });
-    res.json({ success: true, data: saved, message: status === 'approved' ? '题目已通过审核' : '题目状态已更新' });
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
@@ -590,15 +594,13 @@ router.post('/restore', (req, res) => {
     }
     
     // 恢复数据
-    Object.keys(data).forEach(key => {
-      db.data[key] = data[key];
-    });
+    db.restore(data);
     
     db.addLog(userId, 'RESTORE_DATA', { timestamp: new Date().toISOString() });
     
     res.json({ success: true, message: '数据恢复成功' });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(400).json({ success: false, message: error.message });
   }
 });
 

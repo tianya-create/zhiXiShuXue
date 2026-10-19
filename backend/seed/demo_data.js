@@ -45,7 +45,7 @@ function seedDemoData() {
     db.data.users.push({
       id: 'student-demo',
       username: 'student-demo',
-      password: '$2a$10$dM0KEsJPV9ElJndBmm48Xu2rvR9VuV25tMWyPGUCUTRY8cs4FLUt.',
+      password: '$2a$10$VhK8fA7R1QmV6b5lS3nHxuWgOvk6QH6Z8m0lZ0lJ2lNQk0K4x3y4m',
       role: 'student',
       name: '演示学生',
       createdAt: new Date().toISOString(),

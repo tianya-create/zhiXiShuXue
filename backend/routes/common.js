@@ -2,6 +2,10 @@ const express = require('express');
 const compression = require('compression');
 const router = express.Router();
 const db = require('../database/memory-db');
+const { roles } = require('../middleware/access');
+const { publicQuestion } = require('../services/question-quality');
+const { nodes } = require('../services/curriculum');
+const { getPersonalizedPush } = require('../services/personalized-push');
 const {
   ensureKnowledgeGraph,
   ensureGeneratedQuestions,
@@ -33,7 +37,7 @@ router.get('/knowledge-graph', (req, res) => {
 
 router.get('/wrong-q/:knowledgeId', (req, res) => {
   try {
-    res.json({ success: true, data: getWrongQuestionsByKnowledge(req.params.knowledgeId) });
+    res.json({ success: true, data: db.getAllMistakesForStudent((db.findOne('students', { userId: req.user.id }) || {}).id).filter(item => item.kpCode === req.params.knowledgeId) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -41,40 +45,14 @@ router.get('/wrong-q/:knowledgeId', (req, res) => {
 
 router.get('/recommend-q/:knowledgeId', (req, res) => {
   try {
-    res.json({ success: true, data: getRecommendQuestionsByKnowledge(req.params.knowledgeId) });
+    res.json({ success: true, data: require('../services/manual-question-bank').getQuestionBankByNode({ knowledgePointId: req.params.knowledgeId }).slice(0, 5).map(publicQuestion) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-router.get('/knowledge-points', (req, res) => {
-  try {
-    const knowledgePoints = db.find('knowledgePoints').filter(
-      (kp) => kp.curriculum || kp.isRoot || kp.isCategory
-    );
-    const tree = [];
-    const map = {};
-    knowledgePoints.forEach(kp => { map[kp.id] = { ...kp, children: [] }; });
-    knowledgePoints.forEach(kp => {
-      if (kp.parentId && map[kp.parentId]) map[kp.parentId].children.push(map[kp.id]);
-      else if (!kp.parentId) tree.push(map[kp.id]);
-    });
-    res.json({ success: true, data: tree });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-router.get('/knowledge-points/flat', (req, res) => {
-  try {
-    res.json({
-      success: true,
-      data: db.find('knowledgePoints').filter((kp) => kp.curriculum || kp.isRoot || kp.isCategory)
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
+router.get('/knowledge-points', (req,res) => res.json({success:true,data:require('../services/curriculum').curriculumTree()}));
+router.get('/knowledge-points/flat', (req,res) => res.json({success:true,data:require('../services/curriculum').nodes}));
 
 router.get('/classes', (req, res) => {
   try {
@@ -106,13 +84,13 @@ router.post('/upload', (req, res) => {
 
 router.get('/system-info', (req, res) => {
   try {
-    res.json({ success: true, data: { name: '智析数学', version: '1.0.0', description: 'K12 数学在线教育平台（教师端/学生端/后台管理端）' } });
+    res.json({ success: true, data: { name: '智析数学', version: '1.0.0', description: '初中数学智能学情分析平台 - 学生端、教师端、管理端' } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-router.post('/question-bank/generate', (req, res) => {
+router.post('/question-bank/generate', roles('admin'), (req, res) => {
   try {
     const { perKnowledgePoint = 6 } = req.body || {};
     const amount = Math.max(3, Math.min(30, Number(perKnowledgePoint) || 6));
@@ -126,7 +104,7 @@ router.post('/question-bank/generate', (req, res) => {
 router.get('/question-bank', (req, res) => {
   try {
     const { knowledgePointId, difficulty, type, source } = req.query;
-    res.json({ success: true, data: getQuestionBank({ knowledgePointId, difficulty, type, source }) });
+    res.json({ success: true, data: req.user.role === 'student' ? getQuestionBank({ knowledgePointId, difficulty, type, source }).filter(item => item.reviewStatus === 'approved').map(publicQuestion) : getQuestionBank({ knowledgePointId, difficulty, type, source }) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -143,8 +121,9 @@ router.get('/question-bank/schema', (req, res) => {
 router.get('/recommendations/:studentId', (req, res) => {
   try {
     const { studentId } = req.params;
+    if (!db.findById('students', studentId)) return res.status(403).json({ success: false, message: '无权访问此学生' });
     const limit = Math.max(5, Math.min(10, Number(req.query.limit) || 6));
-    res.json({ success: true, data: recommendQuestions(studentId, limit) });
+    res.json({ success: true, data: getPersonalizedPush(studentId, { limit }).questions.map(publicQuestion) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -152,7 +131,8 @@ router.get('/recommendations/:studentId', (req, res) => {
 
 router.get('/wrong-stats/:studentId', (req, res) => {
   try {
-    res.json({ success: true, data: getWrongStats(req.params.studentId) });
+    if (!db.findById('students', req.params.studentId)) return res.status(403).json({ success: false, message: '无权访问此学生' });
+    res.json({ success: true, data: { questionBook: db.getAllMistakesForStudent(req.params.studentId), knowledgePointStats: nodes.map(node => { const state = require('../services/masteryEngine').calculateMastery(req.params.studentId, node.id); return { knowledgePointId: node.id, knowledgePointName: node.name, masteryRate: state.mastery, statusLabel: state.status, attemptCount: state.attemptCount }; }) } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

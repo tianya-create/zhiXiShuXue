@@ -4,6 +4,7 @@
     <button
       v-if="!panelVisible"
       class="ai-tutor-fab"
+      aria-label="打开AI助教小智"
       type="button"
       @click="panelVisible = true"
     >
@@ -18,7 +19,7 @@
 
     <!-- 面板 -->
     <transition name="ai-panel">
-      <section v-if="panelVisible" class="ai-tutor-panel">
+      <section v-if="panelVisible" class="ai-tutor-panel" role="dialog" aria-label="AI助教小智" @keydown.esc="panelVisible = false">
         <!-- 面板头部 -->
         <header class="panel-header">
           <div class="header-left">
@@ -29,11 +30,11 @@
               <div class="panel-title">小智助教</div>
               <div class="panel-status">
                 <span class="status-dot"></span>
-                在线
+                {{ configStatus?.ready ? '已配置' : '待就绪' }}
               </div>
             </div>
           </div>
-          <button class="panel-close-btn" type="button" @click="panelVisible = false">
+          <button class="panel-close-btn" type="button" aria-label="关闭小智" @click="panelVisible = false">
             <el-icon><Close /></el-icon>
           </button>
         </header>
@@ -42,6 +43,8 @@
         <div class="mode-switch-bar">
           <button
             type="button"
+            aria-label="普通聊天"
+            :aria-pressed="activeMode === 'chat'"
             :class="['mode-chip', { 'is-active': activeMode === 'chat' }]"
             @click="switchMode('chat')"
           >
@@ -50,6 +53,8 @@
           </button>
           <button
             type="button"
+            aria-label="题目提问"
+            :aria-pressed="activeMode === 'problem'"
             :class="['mode-chip', { 'is-active': activeMode === 'problem' }]"
             @click="switchMode('problem')"
           >
@@ -94,7 +99,7 @@
               <span>AI</span>
             </div>
             <div class="message-bubble">
-              <div class="message-text">{{ item.content }}</div>
+              <div class="message-text" v-html="renderMath(item.content)"></div>
             </div>
             <div v-if="item.role === 'user'" class="message-avatar ai-user-avatar">
               <el-icon><UserFilled /></el-icon>
@@ -164,6 +169,8 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ChatDotRound, Document, UserFilled, Warning, Promotion, Close } from '@element-plus/icons-vue'
 import api from '@/utils/api'
+import { renderMath } from '@/utils/math-render'
+import 'katex/dist/katex.min.css'
 
 var panelVisible = ref(false)
 var loading = ref(false)
@@ -177,7 +184,7 @@ var messageListRef = ref(null)
 var messages = ref([
   {
     role: 'assistant',
-    content: '你好，我是小智助教。你可以切换「普通聊天」和「题目提问」两种模式；题目模式下我只提供思路，不直接给答案哦～'
+    content: '你好，我是小智助教。你可以切换「普通聊天」和「题目提问」两种模式；题目模式下我会先提供思路和步骤提示。回复仅供学习参考，有疑问请向老师确认。'
   }
 ])
 
@@ -214,7 +221,7 @@ function switchMode(mode) {
 }
 
 var canSend = computed(function () {
-  return !loading.value && (!configStatus.value || configStatus.value.ready) && !validateLocally(inputValue.value, activeMode.value)
+  return !loading.value && configStatus.value?.ready && !validateLocally(inputValue.value, activeMode.value)
 })
 
 var configStatusClass = computed(function () {
@@ -227,7 +234,7 @@ var configStatusText = computed(function () {
   if (checkingConfig.value) return '正在检测 AI 助教配置...'
   if (!configStatus.value) return '尚未检测 AI 助教配置'
   if (configStatus.value.ready) {
-    return 'AI助教配置正常 · ' + (configStatus.value.model || '未知模型')
+    return '配置已填写 · ' + (configStatus.value.model || '未知模型')
   }
   return 'AI助教配置异常'
 })
@@ -273,6 +280,7 @@ function handleInput(value) {
 }
 
 async function sendQuestion() {
+  if (loading.value) return
   var question = String(inputValue.value || '').trim()
   validationMessage.value = validateLocally(question, activeMode.value)
   errorMessage.value = ''
@@ -290,7 +298,7 @@ async function sendQuestion() {
   scrollToBottom()
 
   try {
-    var history = messages.value.slice(-8, -1)
+    var history = messages.value.slice(-9, -1)
     var res = await api.student.askAiTutor({ question: question, history: history, mode: activeMode.value })
     if (res.success && res.data) {
       messages.value.push({ role: 'assistant', content: res.data.content })
@@ -299,7 +307,9 @@ async function sendQuestion() {
     }
     throw new Error(res.message || 'AI助教暂时不可用')
   } catch (error) {
-    errorMessage.value = error && error.message ? error.message : '发送失败，请稍后重试'
+    errorMessage.value = error.response?.data?.message || error.message || '发送失败，请稍后重试'
+    inputValue.value = question
+    messages.value.pop()
     ElMessage.error(errorMessage.value)
   } finally {
     loading.value = false
@@ -436,7 +446,8 @@ onMounted(function () {
   background: var(--surface-raised);
   display: flex;
   flex-direction: column;
-  max-height: min(600px, calc(100vh - 120px));
+  height: min(600px, calc(100dvh - 160px));
+  max-height: calc(100dvh - 160px);
 }
 
 /* === 面板头部 === */
@@ -748,6 +759,16 @@ onMounted(function () {
   white-space: pre-wrap;
 }
 
+.message-text :deep(.katex) {
+  font-size: 1em;
+}
+
+.message-text :deep(.katex-display) {
+  margin: 8px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 /* === 加载状态 === */
 .is-loading-item .message-bubble {
   display: flex;
@@ -878,6 +899,7 @@ onMounted(function () {
   .ai-tutor-panel {
     width: min(340px, calc(100vw - 16px));
     right: -8px;
+    bottom: 78px;
   }
 }
 </style>

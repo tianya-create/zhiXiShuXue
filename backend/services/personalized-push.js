@@ -1,186 +1,117 @@
-const db = require('../database/memory-db')
-const { getQuestionBankByNode, ensureManualQuestionBank } = require('./manual-question-bank')
-
-const STATUS_TO_PLAN = {
-  red: [1, 1, 2, 2, 3],
-  orange: [2, 2, 3, 3, 4],
-  green: [4, 4, 5, 5]
-}
-
-const GRAPH_STATUS_BASELINE = {
-  '未掌握': 50,
-  '待巩固': 70,
-  '已掌握': 86
-}
-
-function getNodeBase(knowledgePointId) {
-  const graphNode = (db.data.knowledgeGraphNodes || []).find(item => item.id === knowledgePointId)
-  const kp = db.findById('knowledgePoints', knowledgePointId)
-  return {
-    id: knowledgePointId,
-    name: graphNode ? graphNode.name : (kp ? kp.name : knowledgePointId),
-    domain: graphNode ? graphNode.domain : '',
-    graphStatus: graphNode ? graphNode.masterStatus : '待巩固'
-  }
-}
-
-function getRecentAttempts(studentId, knowledgePointId) {
-  return db.find('student_answer')
-    .filter(item => item.userId === studentId && item.kpCode === knowledgePointId)
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-}
-
+const db = require("../database/memory-db");
+const { calculateMastery } = require("./masteryEngine");
+const { eligibleNodes, nodes } = require("./curriculum");
+const { getQuestionBankByNode } = require("./manual-question-bank");
 function computeMastery(studentId, knowledgePointId) {
-  const attempts = getRecentAttempts(studentId, knowledgePointId).slice(0, 5)
-  const node = getNodeBase(knowledgePointId)
-  const base = GRAPH_STATUS_BASELINE[node.graphStatus] || 68
-
-  if (!attempts.length) {
-    return base
-  }
-
-  const correctRate = attempts.filter(item => item.isCorrect).length / attempts.length
-  const avgDifficulty = attempts.reduce((sum, item) => {
-    const q = db.findById('questions', item.questionId)
-    return sum + Number((q && q.difficultyLevel) || 2)
-  }, 0) / attempts.length
-
-  const recencyBoost = attempts.length >= 3 && attempts.slice(0, 3).every(item => item.isCorrect) ? 8 : 0
-  const recencyPenalty = attempts.length >= 2 && attempts.slice(0, 2).every(item => !item.isCorrect) ? 12 : 0
-  const difficultyFactor = (avgDifficulty - 3) * 4
-  const mastery = Math.round(base + (correctRate - 0.5) * 38 + difficultyFactor + recencyBoost - recencyPenalty)
-
-  return Math.max(20, Math.min(96, mastery))
+  return calculateMastery(studentId, knowledgePointId).mastery;
 }
-
 function getColorStatus(studentId, knowledgePointId) {
-  const mastery = computeMastery(studentId, knowledgePointId)
-  if (mastery < 60) return { status: 'red', mastery, label: '未掌握' }
-  if (mastery < 80) return { status: 'orange', mastery, label: '待巩固' }
-  return { status: 'green', mastery, label: '已掌握' }
+  const value = calculateMastery(studentId, knowledgePointId);
+  return {
+    status:
+      value.status === "尚未测评"
+        ? "gray"
+        : value.status === "样本不足"
+          ? "blue"
+          : value.mastery < 60
+            ? "red"
+            : value.mastery < 80
+              ? "orange"
+              : "green",
+    mastery: value.mastery,
+    label: value.status,
+    confidence: value.confidence,
+    attemptCount: value.attemptCount,
+  };
 }
-
-function wasPushedWithin24h(studentId, knowledgePointId, questionId) {
-  const last = db.find('recommendationLogs')
-    .filter(item => item.studentId === studentId && item.knowledgePointId === knowledgePointId && item.questionId === questionId)
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0]
-  if (!last) return false
-  return Date.now() - new Date(last.createdAt).getTime() < 24 * 60 * 60 * 1000
-}
-
-function createWrongSnapshot(studentId, knowledgePointId) {
-  const node = getNodeBase(knowledgePointId)
-  const count = Math.floor(Math.random() * 4)
-  const rows = []
-  for (let i = 0; i < count; i += 1) {
-    rows.push({
-      wrongId: `${studentId}-${knowledgePointId}-history-${i + 1}`,
-      knowledgeId: knowledgePointId,
-      questionBody: `${node.name} 演示错题 ${i + 1}`,
-      studentAnswer: `错误作答 ${i + 1}`,
-      correctAnswer: '标准答案',
-      errorOption: 'A',
-      errorAnalysis: '概念理解不牢，审题不够仔细。',
-      reflection: '下次先标记题目中的关键信息，再列式。',
-      tags: [node.domain || '初中数学', node.name],
-      updateTime: new Date(Date.now() - i * 3600 * 1000).toISOString()
-    })
-  }
-  return rows
-}
-
-function ensureDemoWrongHistory(studentId) {
-  if (!db.data.knowledgeGraphWrong) db.data.knowledgeGraphWrong = []
-  const graphNodes = db.data.knowledgeGraphNodes || []
-  graphNodes.forEach(item => {
-    const existed = db.data.knowledgeGraphWrong.filter(row => row.knowledgeId === item.id && String(row.wrongId || '').startsWith(studentId + '-'))
-    if (!existed.length) {
-      createWrongSnapshot(studentId, item.id).forEach(row => db.data.knowledgeGraphWrong.push(row))
-    }
-  })
-}
-
-function pickQuestions(studentId, knowledgePointId, status, limit) {
-  ensureManualQuestionBank()
-  const plan = STATUS_TO_PLAN[status] || STATUS_TO_PLAN.orange
-  const pool = getQuestionBankByNode({ knowledgePointId })
-  const chosen = []
-  const seen = new Set()
-
-  plan.forEach(level => {
-    if (chosen.length >= limit) return
-    const candidate = pool.find(item => Number(item.difficultyLevel) === Number(level) && !seen.has(item.id) && !wasPushedWithin24h(studentId, knowledgePointId, item.id))
-    if (candidate) {
-      seen.add(candidate.id)
-      chosen.push(candidate)
-    }
-  })
-
-  if (chosen.length < limit) {
-    pool.forEach(item => {
-      if (chosen.length >= limit) return
-      if (seen.has(item.id)) return
-      seen.add(item.id)
-      chosen.push(item)
-    })
-  }
-
-  return chosen.slice(0, limit)
-}
-
+function ensureDemoWrongHistory() {} // Kept temporarily for legacy callers; never creates data.
 function getPersonalizedPush(studentId, options = {}) {
-  ensureManualQuestionBank()
-  ensureDemoWrongHistory(studentId)
-  const limit = Math.max(1, Math.min(3, Number(options.limit) || 3))
-  const graphNodes = db.data.knowledgeGraphNodes || []
-  const ranked = graphNodes.map(item => ({ ...item, ...getColorStatus(studentId, item.id) }))
-    .sort((a, b) => a.mastery - b.mastery)
-
+  const limit = Math.max(1, Math.min(12, Number(options.limit) || 3));
+  const eligible = eligibleNodes(studentId);
+  const ranked = eligible
+    .map((node) => ({ ...node, ...getColorStatus(studentId, node.id) }))
+    .sort((a, b) => (a.mastery ?? -1) - (b.mastery ?? -1));
+  const now = Date.now();
+  const attempts = db.find("student_answer", { userId: studentId });
+  const questions = [];
   for (const node of ranked) {
-    if (node.status !== 'red' && node.status !== 'orange') continue
-    const questions = pickQuestions(studentId, node.id, node.status, limit)
-    if (questions.length) {
-      questions.forEach(question => {
-        db.create('recommendationLogs', {
+    const pool = getQuestionBankByNode({ knowledgePointId: node.id })
+      .filter((question) => {
+        const history = attempts
+          .filter((item) => item.questionId === question.id)
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const latest = history[0];
+        const schedule = db.findOne("studentQuestionAttempts", {
           studentId,
-          knowledgePointId: node.id,
-          knowledgePointName: node.name,
           questionId: question.id,
-          reason: node.label,
-          createdAt: new Date().toISOString()
-        })
+        });
+        if (
+          schedule?.nextReviewAt &&
+          new Date(schedule.nextReviewAt).getTime() > now
+        )
+          return false;
+        if (
+          !schedule?.nextReviewAt &&
+          latest &&
+          now - new Date(latest.createdAt).getTime() < 86400000
+        )
+          return false;
+        return !db
+          .find("recommendationLogs")
+          .some(
+            (log) =>
+              log.studentId === studentId &&
+              log.questionIds?.includes(question.id) &&
+              now - new Date(log.createdAt).getTime() < 86400000,
+          );
       })
-      return {
-        knowledgePointId: node.id,
-        knowledgePointName: node.name,
-        mastery: node.mastery,
-        status: node.label,
-        questions: questions.map(item => {
-          const options = Array.isArray(item.options) ? item.options : []
-          const rawAnswer = String(item.answer || item.answer_text || '').trim()
-          const answerIndex = options.findIndex(option => String(option || '').trim() === rawAnswer)
-          const standardAnswer = answerIndex >= 0
-            ? `${String.fromCharCode(65 + answerIndex)}（${rawAnswer}）`
-            : rawAnswer
-
-          return {
-            ...item,
-            standardAnswer,
-            answerDisplay: standardAnswer,
-            visibleQuestionNo: `第${item.difficultyLevel || item.difficulty || 1}层题`,
-            recommendationReason: `${node.name} 当前为${node.label}，按规则推送 ${item.difficultyLevel} 级题目。`
-          }
-        })
-      }
+      .sort((a, b) => a.difficultyLevel - b.difficultyLevel);
+    const prerequisites = (node.prerequisites || [])
+      .filter((id) => eligible.some((item) => item.id === id))
+      .filter((id) => {
+        const status = getColorStatus(studentId, id);
+        return status.mastery !== null && status.mastery < 60;
+      });
+    if (prerequisites.length) continue;
+    for (const question of pool) {
+      if (questions.length >= limit) break;
+      if (node.mastery === null && question.difficultyLevel > 2) continue;
+      questions.push({
+        ...question,
+        recommendationReason:
+          node.mastery === null
+            ? "这个知识点尚未测评，先通过基础题了解学习情况。"
+            : node.confidence === "limited"
+              ? "目前作答样本不足，补充不同题目后再判断掌握情况。"
+              : "根据真实答题记录复习已学知识点。",
+      });
     }
+    if (questions.length >= limit) break;
   }
-
-  return { knowledgePointId: '', knowledgePointName: '', mastery: 0, status: '已掌握', questions: [] }
+  if (questions.length)
+    db.create("recommendationLogs", {
+      studentId,
+      questionIds: questions.map((item) => item.id),
+      reason: "按已学范围、真实作答和复习间隔选题",
+    });
+  return {
+    studentId,
+    questions,
+    focusKnowledgePoints: [
+      ...new Set(questions.map((item) => item.knowledgeNodeName)),
+    ],
+    recommendationReason: questions.length
+      ? "按已学范围和真实作答推荐。"
+      : eligible.length
+        ? "当前没有符合复习间隔的已审核题目，可选择知识点专项练习或请老师补充题目。"
+        : "请老师先设置班级已学知识点。",
+    knowledgePointId: questions[0]?.knowledgePointId || "",
+    knowledgePointName: questions[0]?.knowledgeNodeName || "",
+  };
 }
-
 module.exports = {
   computeMastery,
   getColorStatus,
+  getPersonalizedPush,
   ensureDemoWrongHistory,
-  getPersonalizedPush
-}
+};

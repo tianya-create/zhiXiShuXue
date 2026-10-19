@@ -2,7 +2,6 @@ const db = require("../database/memory-db");
 const { gradeAnswer } = require("./autoGrade");
 const { updateMastery } = require("./masteryEngine");
 const { enrichQuestion } = require("./curriculum");
-const { canonicalKnowledgeId } = require("./question-map");
 function gradeQuestions(ids, answers, overrides = []) {
   return [...new Set(ids)].map((id) => {
     const question =
@@ -36,7 +35,7 @@ function synchronize(record) {
       !String(result.answer || "").trim()
     )
       continue;
-    const kpCode = canonicalKnowledgeId(question.knowledgePointId || question.knowledgePoints?.[0]);
+    const kpCode = question.knowledgePointId || question.knowledgePoints?.[0];
     if (!kpCode) continue;
     affected.add(kpCode);
     const sourceRef = record.id + ":" + result.questionId;

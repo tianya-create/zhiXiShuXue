@@ -145,10 +145,10 @@
                       <el-tag size="small" effect="plain">{{ getDifficultyLabel(question.difficulty) }}</el-tag>
                     </div>
                   </div>
-                  <MathText class="question-content" :text="question.content" />
+                  <div class="question-content">{{ question.content }}</div>
                   <div v-if="question.options && question.options.length" class="option-list">
                     <div v-for="(option, optionIndex) in question.options" :key="optionIndex" class="option-item">
-                      {{ String.fromCharCode(65 + optionIndex) }}. <MathText :text="option" />
+                      {{ String.fromCharCode(65 + optionIndex) }}. {{ option }}
                     </div>
                   </div>
                   <el-input
@@ -175,7 +175,7 @@
                   </div>
                 </div>
 
-                <MathText class="question-content" :text="question.content" />
+                <div class="question-content">{{ question.content }}</div>
 
                 <div v-if="question.options && question.options.length" class="option-list">
                   <div
@@ -183,7 +183,7 @@
                     :key="optionIndex"
                     class="option-item"
                   >
-                    {{ String.fromCharCode(65 + optionIndex) }}. <MathText :text="option" />
+                    {{ String.fromCharCode(65 + optionIndex) }}. {{ option }}
                   </div>
                 </div>
 
@@ -203,15 +203,11 @@
                   v-if="questionFeedbackMap[question.id]"
                   :class="[
                     'question-feedback',
-                    questionFeedbackMap[question.id].needsReview
-                      ? 'is-pending'
-                      : (questionFeedbackMap[question.id].correct ? 'is-correct' : 'is-wrong')
+                    questionFeedbackMap[question.id].correct ? 'is-correct' : 'is-wrong'
                   ]"
                 >
                   <div class="feedback-title">
-                    {{ questionFeedbackMap[question.id].needsReview
-                      ? '已提交，等待老师复核'
-                      : (questionFeedbackMap[question.id].correct ? '回答正确' : '回答有误') }}
+                    {{ questionFeedbackMap[question.id].correct ? '回答正确' : '回答有误' }}
                   </div>
                   <div>正确答案：{{ questionFeedbackMap[question.id].answer || '-' }}</div>
                   <div v-if="questionFeedbackMap[question.id].analysis">
@@ -403,8 +399,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Reading, Calendar } from '@element-plus/icons-vue'
 import api from '@/utils/api'
-import MathText from '@/components/MathText.vue'
-import { useAnswerDraft } from '@/composables/useAnswerDraft'
 import { MAJOR_CATEGORY_CONFIG, getMasteryStatus, inferMajorCategory } from '@/utils/knowledge-meta'
 import * as echarts from 'echarts'
 
@@ -415,8 +409,6 @@ const loading = ref(false)
 const submitting = ref(false)
 const questions = ref([])
 const answers = reactive({})
-// 练习草稿：学生中途退出后可以接着答
-const draft = useAnswerDraft('practice-' + (route.query.kpId || route.query.knowledgePointId || 'custom'), answers, questions)
 const questionFeedbackMap = reactive({})
 
 const practiceMeta = reactive({
@@ -849,14 +841,11 @@ function submitPractice() {
         }, {}),
         questionIds,
         mode: practiceMeta.mode,
-        title: practiceMeta.title || '个性化补练',
-        requestId: draft.requestId.value
+        title: practiceMeta.title || '个性化补练'
       })
     })
     .then((res) => {
       if (res && res.success) {
-        draft.pause()
-        draft.clear()
         const data = res.data || {}
         resultVisible.value = true
         resultData.totalScore = data.totalScore || 0
@@ -879,7 +868,6 @@ function submitPractice() {
           if (result) {
             questionFeedbackMap[question.id] = {
               correct: !!result.correct,
-              needsReview: !!result.needsReview,
               answer:
                 question.type === 'choice'
                   ? (question.answerDisplay || question.answer || '-')
@@ -1178,11 +1166,6 @@ function getStatusText(status) {
   color: #166534;
 }
 
-.question-feedback.is-pending {
-  background: #fffbeb;
-  border-color: #f5dab1;
-  color: #b45309;
-}
 .question-feedback.is-wrong {
   background: #fff7ed;
   color: #9a3412;

@@ -1,16 +1,20 @@
 {
   "name": "zhixi-math",
   "version": "1.0.0",
-  "description": "智析数学 V1.0 - K12 数学在线教育平台（教师端/学生端/后台管理端）",
+  "description": "智析数学 - 初中数学智能学情分析平台（学生端、教师端、管理端）",
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "server": "cd backend && npm run dev",
     "client": "node backend/ensure-port-free.js 5000 && cd frontend && npm run dev",
     "install:all": "cd backend && npm install && cd ../frontend && npm install",
     "build": "cd frontend && npm run build",
-    "start": "cd backend && npm run start"
+    "start": "cd backend && npm run start",
+    "postinstall": "cd backend && npm install && cd ../frontend && npm install"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "katex": "^0.17.0"
   }
 }

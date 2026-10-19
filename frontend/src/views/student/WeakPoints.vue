@@ -1,102 +1,82 @@
 <template>
   <div class="weak-points">
-    <div class="page-header">
+    <div class="page-header weak-header">
       <div class="header-left">
         <h2>薄弱知识点</h2>
-        <p>按掌握度排序，优先补齐最需要强化的知识点</p>
+        <p>还没掌握的知识点都列在这里，掌握度低的排在前面。</p>
       </div>
-      <el-button type="primary" :disabled="!weakPoints.length" @click="generatePracticePlan">
-        一键生成专项补练计划
+      <el-button type="primary" size="large" :disabled="!weakPoints.length" @click="generatePracticePlan">
+        按顺序补最弱的 3 个
       </el-button>
     </div>
 
-    <el-card v-if="newRecommendations.length" class="gradient-card recommend-card">
-      <template #header>
-        <div class="recommend-header">
-          <div>
-            <div class="recommend-title">老师批改后生成了新的补练推荐</div>
-            <div class="recommend-subtitle">以下知识点来自最近一次作业结果，建议优先完成补练。</div>
+    <section v-if="newRecommendations.length" class="teacher-note">
+      <h3 class="note-title">老师批改后，这些知识点需要先补</h3>
+      <ul class="note-list">
+        <li v-for="item in newRecommendations" :key="item.id" class="note-item">
+          <div class="note-main">
+            <span class="note-name">{{ item.name }}</span>
+            <span class="note-meta">
+              错了 <b class="nb-num">{{ item.wrongCount }}</b> 次，掌握度 <b class="nb-num">{{ item.masteryRate }}%</b>
+              <template v-if="item.lastHomeworkAt">，{{ formatDate(item.lastHomeworkAt) }} 的作业</template>
+            </span>
           </div>
-          <el-tag type="danger">新推荐 {{ newRecommendations.length }}</el-tag>
-        </div>
-      </template>
+          <el-button type="primary" @click="startPractice(item)">去练习</el-button>
+        </li>
+      </ul>
+    </section>
 
-      <div class="recommend-list">
-        <div v-for="item in newRecommendations" :key="item.id" class="recommend-item">
-          <div class="recommend-main">
-            <div class="recommend-name-row">
-              <span class="recommend-name">{{ item.name }}</span>
-              <el-tag type="warning" effect="dark">来自最近批改</el-tag>
-            </div>
-            <div class="recommend-meta">
-              <span>错误次数 {{ item.wrongCount }}</span>
-              <span>掌握度 {{ item.masteryRate }}%</span>
-              <span v-if="item.lastHomeworkAt">作业时间 {{ formatDate(item.lastHomeworkAt) }}</span>
-            </div>
-          </div>
-          <el-button type="danger" @click="startPractice(item)">立即补练</el-button>
-        </div>
-      </div>
-    </el-card>
+    <div v-loading="loading" class="category-list">
+      <section v-for="group in groupedWeakPoints" :key="group.name" class="category-item">
+        <button
+          type="button"
+          class="category-head"
+          :aria-expanded="isCategoryExpanded(group.name)"
+          @click="toggleCategory(group.name)"
+        >
+          <span class="category-title">{{ group.name }}</span>
+          <span class="category-desc">{{ group.summary }}</span>
+          <span class="category-count nb-num">{{ group.items.length }}</span>
+          <el-icon :class="['category-arrow', { 'is-open': isCategoryExpanded(group.name) }]"><ArrowDown /></el-icon>
+        </button>
 
-    <el-card class="gradient-card" v-loading="loading">
-      <div class="category-list">
-        <div v-for="group in groupedWeakPoints" :key="group.name" class="category-item">
-          <div class="category-head" @click="toggleCategory(group.name)">
-            <div>
-              <div class="category-title">{{ group.name }}</div>
-              <div class="category-desc">{{ group.summary }}</div>
-            </div>
-            <div class="category-head-right">
-              <el-tag :type="group.tagType">{{ group.items.length }} 个</el-tag>
-              <span class="category-toggle">{{ isCategoryExpanded(group.name) ? '收起' : '展开' }}</span>
-            </div>
-          </div>
-
-          <div v-show="isCategoryExpanded(group.name)" class="category-content">
-            <div v-if="group.items.length" class="kp-list">
-              <div v-for="item in group.items" :key="item.id" class="kp-item">
-                <div class="kp-main">
-                  <div class="kp-name-cell">
-                    <span>{{ item.name }}</span>
-                    <el-tag v-if="item.hasNewRecommendation" type="danger" size="small">新推荐</el-tag>
-                  </div>
-                  <div class="kp-meta">
-                    <span class="meta-item">掌握度 <b>{{ parseInt(item.masteryRate || 0, 10) }}%</b></span>
-                    <span class="meta-item">近五次均分 <b>{{ item.averageScore || 0 }}</b></span>
-                    <span class="meta-item">建议学习 <b>{{ item.suggestedStudyTime || 0 }}min</b></span>
-                    <span class="meta-item" v-if="item.lastWrongTime">最近答错 {{ formatDate(item.lastWrongTime) }}</span>
-                  </div>
-                  <el-progress :percentage="parseInt(item.masteryRate || 0, 10)" :color="getProgressColor(item.masteryRate)" :stroke-width="8" />
+        <div v-show="isCategoryExpanded(group.name)" class="category-content">
+          <ul v-if="group.items.length" class="kp-list">
+            <li v-for="item in group.items" :key="item.id" :class="['kp-item', 'is-' + getMasteryStatus(item.masteryRate)]">
+              <div class="kp-main">
+                <div class="kp-name-row">
+                  <span class="kp-name">{{ item.name }}</span>
+                  <span class="kp-status">{{ item.statusLabel }}</span>
+                  <span v-if="item.hasNewRecommendation" class="kp-new">老师推荐</span>
                 </div>
-                <div class="kp-side">
-                  <div class="status-tags">
-                    <el-tag :type="getMasteryTagType(item.masteryRate)" effect="plain">
-                      {{ getMasteryLabel(item.masteryRate) }}
-                    </el-tag>
-                    <el-tag v-if="item.hasNewRecommendation" type="danger" effect="dark">优先处理</el-tag>
-                  </div>
-                  <el-button :type="item.masteryRate < 60 ? 'danger' : 'primary'" size="small" @click="startPractice(item)">
-                    {{ item.masteryRate < 60 ? '专项突破' : '巩固提升' }}
-                  </el-button>
+                <div class="kp-bar" role="progressbar" :aria-valuenow="parseInt(item.masteryRate || 0, 10)" aria-valuemin="0" aria-valuemax="100" :aria-label="item.name + ' 掌握度'">
+                  <span :style="{ width: parseInt(item.masteryRate || 0, 10) + '%' }"></span>
+                </div>
+                <div class="kp-meta">
+                  <span>掌握度 <b class="nb-num">{{ parseInt(item.masteryRate || 0, 10) }}%</b></span>
+                  <span v-if="item.suggestedStudyTime">建议学 {{ item.suggestedStudyTime }} 分钟</span>
+                  <span v-if="item.lastWrongTime">最近答错 {{ formatDate(item.lastWrongTime) }}</span>
                 </div>
               </div>
-            </div>
-            <el-empty v-else description="当前分类暂无薄弱知识点" />
-          </div>
+              <el-button @click="startPractice(item)">去练习</el-button>
+            </li>
+          </ul>
+          <p v-else class="category-empty">这一类没有薄弱知识点。</p>
         </div>
-      </div>
-    </el-card>
+      </section>
+    </div>
   </div>
 </template>
 
 <script setup>
+import { NB_CHART as CHART_COLORS } from '@/utils/notebook-colors'
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/utils/api'
 import dayjs from 'dayjs'
 import { MAJOR_CATEGORY_CONFIG, getMasteryStatus, inferMajorCategory } from '@/utils/knowledge-meta'
+import { ArrowDown } from '@element-plus/icons-vue'
 
 var router = useRouter()
 var weakPoints = ref([])
@@ -141,7 +121,7 @@ function loadData() {
     .then(function(res) {
       if (res.success) {
         // 后端已经过滤并排序好了，只保留掌握度 < 80 的（即红和黄）
-        weakPoints.value = (res.data || []).filter(function(p) { return p.masteryRate < 80 })
+        weakPoints.value = (res.data || []).filter(function(p) { return p.eligible && p.masteryRate !== null && p.masteryRate < 80 })
         ensureExpandedState()
       }
     })
@@ -154,7 +134,7 @@ function loadData() {
 }
 
 function getMasteryLabel(rate) {
-  if (rate < 60) return '急需突破'
+  if (rate < 60) return '薄弱'
   if (rate < 80) return '待巩固'
   return '已掌握'
 }
@@ -166,25 +146,31 @@ function getMasteryTagType(rate) {
 }
 
 function generatePracticePlan() {
-  const topN = 3;
-  const targetKPs = weakPoints.value.slice(0, topN);
-  if (!targetKPs.length) return;
+  const topN = 3
+  const targetKPs = weakPoints.value
+    .slice()
+    .sort(function(a, b) { return Number(a.masteryRate || 0) - Number(b.masteryRate || 0) })
+    .slice(0, topN)
+  if (!targetKPs.length) return
 
   ElMessageBox.confirm(
-    `系统已为你锁定前 ${targetKPs.length} 个最薄弱知识点：\n${targetKPs.map(k => k.name).join('、')}\n是否立即生成专项提分补练计划？`,
-    '一键生成计划',
+    `将按掌握度从低到高，依次练习以下 ${targetKPs.length} 个知识点：${targetKPs.map(k => k.name).join('、')}。每完成一组题目会自动进入下一个知识点。`,
+    '专项补练计划',
     {
-      confirmButtonText: '立即生成',
+      confirmButtonText: '开始练习',
       cancelButtonText: '取消',
       type: 'info',
     }
   ).then(() => {
-    // 模拟生成计划，实际可调用后端接口
-    ElMessage.success('提分计划生成成功！正在为你准备习题...');
-    setTimeout(() => {
-      router.push({ path: '/student/practice', query: { kpId: targetKPs[0].id, plan: 'true' } });
-    }, 1000);
-  });
+    router.push({
+      path: '/student/practice',
+      query: {
+        kpId: targetKPs[0].id,
+        plan: targetKPs.map(k => k.id).join(','),
+        planNames: targetKPs.map(k => k.name).join(',')
+      }
+    })
+  }).catch(() => {})
 }
 
 function getCategoryName(item) {
@@ -215,9 +201,9 @@ function isCategoryExpanded(name) {
 
 function getProgressColor(rate) {
   var status = getMasteryStatus(rate)
-  if (status === 'mastered') return '#67C23A'
-  if (status === 'learning') return '#E6A23C'
-  return '#F56C6C'
+  if (status === 'mastered') return CHART_COLORS.mastered
+  if (status === 'learning') return CHART_COLORS.learning
+  return CHART_COLORS.weak
 }
 
 function startPractice(row) {
@@ -230,175 +216,65 @@ function formatDate(date) {
 </script>
 
 <style scoped>
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-}
+.weak-points { display: flex; flex-direction: column; gap: 22px; max-width: 980px; }
+.weak-header { display: flex !important; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.header-left { min-width: 0; }
 
-.header-left h2 {
-  margin: 0;
-  font-size: 24px;
-  color: #111827;
+/* 老师批改后的提醒：像贴在本子上的红笔便条 */
+.teacher-note {
+  position: relative;
+  padding: 18px 22px 18px 26px;
+  background: var(--nb-sheet);
+  border: 1px solid var(--nb-line);
+  border-radius: var(--nb-radius);
+  box-shadow: var(--nb-shadow);
 }
+.teacher-note::before { content: ''; position: absolute; left: 0; top: 16px; bottom: 16px; width: 4px; border-radius: 0 4px 4px 0; background: var(--nb-red); }
+.note-title { margin: 0 0 6px; font-family: var(--nb-font-display); font-weight: 400; font-size: 19px; color: var(--nb-red-ink); }
+.note-list { list-style: none; margin: 0; padding: 0; }
+.note-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px dashed var(--nb-line-strong); }
+.note-item:first-child { border-top: none; }
+.note-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.note-name { font-size: 16px; font-weight: 700; color: var(--nb-ink); }
+.note-meta { font-size: 14px; color: var(--nb-ink-2); }
+.note-meta b { color: var(--nb-ink); }
 
-.header-left p {
-  margin: 4px 0 0;
-  color: #6b7280;
-  font-size: 14px;
-}
-
-.recommend-card {
-  margin-bottom: 20px;
-}
-
-.recommend-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.recommend-title {
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.recommend-subtitle {
-  margin-top: 4px;
-  color: #6b7280;
-  font-size: 13px;
-}
-
-.recommend-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.recommend-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 16px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #fff1f0, #fff7e6);
-}
-
-.recommend-main {
-  flex: 1;
-}
-
-.recommend-name-row,
-.kp-name-cell,
-.status-tags {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.recommend-name {
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.recommend-meta.kp-meta {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-top: 8px;
-  color: #6b7280;
-  font-size: 13px;
-  margin-bottom: 12px;
-}
-
-.meta-item b {
-  color: #111827;
-}
-
-.category-list,
-.kp-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.category-item {
-  border-radius: 14px;
-  border: 1px solid #e5edf8;
-  background: linear-gradient(135deg, #ffffff, #f8fbff);
-  padding: 14px;
-}
-
+/* 分类 */
+.category-list { display: flex; flex-direction: column; gap: 12px; }
+.category-item { background: var(--nb-sheet); border: 1px solid var(--nb-line); border-radius: var(--nb-radius); box-shadow: var(--nb-shadow); overflow: hidden; }
 .category-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  cursor: pointer;
+  width: 100%; display: flex; align-items: center; gap: 12px; padding: 16px 20px;
+  border: none; background: transparent; font: inherit; text-align: left; cursor: pointer; color: var(--nb-ink);
 }
+.category-head:hover { background: #f8fafd; }
+.category-title { font-family: var(--nb-font-display); font-size: 20px; flex-shrink: 0; }
+.category-desc { flex: 1; min-width: 0; font-size: 14px; color: var(--nb-ink-3); }
+.category-count { min-width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; background: #f1f4f9; color: var(--nb-ink); font-size: 14px; }
+.category-arrow { color: var(--nb-ink-3); transition: transform .2s ease; }
+.category-arrow.is-open { transform: rotate(180deg); }
+.category-content { border-top: 1px dashed var(--nb-line-strong); padding: 6px 20px 12px; }
+.category-empty { margin: 10px 0; color: var(--nb-ink-3); font-size: 14px; }
 
-.category-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: #111827;
-}
+/* 知识点 */
+.kp-list { list-style: none; margin: 0; padding: 0; }
+.kp-item { display: flex; align-items: center; gap: 16px; padding: 14px 0; border-top: 1px solid var(--nb-line); }
+.kp-item:first-child { border-top: none; }
+.kp-item.is-mastered { --c: var(--nb-green); --c-ink: var(--nb-green-ink); --c-soft: var(--nb-green-soft); }
+.kp-item.is-learning { --c: var(--nb-orange); --c-ink: var(--nb-orange-ink); --c-soft: var(--nb-orange-soft); }
+.kp-item.is-weak { --c: var(--nb-red); --c-ink: var(--nb-red-ink); --c-soft: var(--nb-red-soft); }
+.kp-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.kp-name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.kp-name { font-size: 16px; font-weight: 700; color: var(--nb-ink); }
+.kp-status { padding: 1px 8px; border-radius: 5px; background: var(--c-soft); color: var(--c-ink); font-size: 14px; font-weight: 700; }
+.kp-new { padding: 1px 8px; border-radius: 5px; border: 1px solid var(--nb-red); color: var(--nb-red-ink); font-size: 14px; font-weight: 700; }
+.kp-bar { height: 8px; border-radius: 4px; background: #edf1f7; overflow: hidden; max-width: 520px; }
+.kp-bar span { display: block; height: 100%; border-radius: 4px; background: var(--c); }
+.kp-meta { display: flex; gap: 16px; flex-wrap: wrap; font-size: 14px; color: var(--nb-ink-3); }
+.kp-meta b { color: var(--nb-ink); }
 
-.category-desc {
-  margin-top: 6px;
-  font-size: 13px;
-  color: #6b7280;
-}
-
-.category-head-right {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.category-toggle {
-  font-size: 12px;
-  color: #6b7280;
-  font-weight: 700;
-}
-
-.category-content {
-  margin-top: 12px;
-}
-
-.kp-item {
-  border-radius: 12px;
-  border: 1px solid #e5edf8;
-  background: #ffffff;
-  padding: 12px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.kp-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.kp-meta {
-  display: flex;
-  gap: 14px;
-  flex-wrap: wrap;
-  margin-top: 6px;
-  margin-bottom: 8px;
-  color: #6b7280;
-  font-size: 13px;
-}
-
-.kp-side {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
+@media (max-width: 640px) {
+  .category-desc { display: none; }
+  .kp-item { flex-direction: column; align-items: stretch; }
+  .note-item { flex-direction: column; align-items: stretch; }
 }
 </style>

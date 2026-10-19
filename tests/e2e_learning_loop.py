@@ -167,20 +167,55 @@ def main():
         check("非法知识点被拒绝", status == 400)
 
     print("== 4. 复核中心 ==")
+    # 解答题一律进入复核：建题 → 布置作业 → 学生提交 → 检查队列
+    review_question = {
+        "type": "subjective",
+        "content": "E2E：请写出解方程 2x+3=7 的完整过程。",
+        "answer": "x=2",
+        "analysis": "移项得 2x=4，两边同除以 2 得 x=2",
+        "knowledgePointId": kp,
+        "score": 10,
+    }
+    status, payload = call("POST", "/teacher/questions", teacher_token, review_question)
+    created_q = payload.get("data") or {}
+    check("创建解答题", status == 200 and created_q.get("id"), payload.get("message", ""))
+    if created_q.get("id"):
+        call("POST", "/teacher/questions/%s/review" % created_q["id"], teacher_token,
+             {"reviewStatus": "approved"})
+        status, payload = call("POST", "/teacher/assignments", teacher_token, {
+            "title": "E2E 复核作业",
+            "classId": class_id,
+            "questionIds": [created_q["id"]],
+            "levels": ["strong", "medium", "weak"],
+        })
+        assignment = payload.get("data") or {}
+        check("布置含解答题的作业", status == 200 and assignment.get("id"), payload.get("message", ""))
+        if assignment.get("id"):
+            status, payload = call("POST", "/student/assignments/%s/submit" % assignment["id"],
+                                   student_token,
+                                   {"answers": {created_q["id"]: "2x=4，所以 x=2"},
+                                    "requestId": str(uuid.uuid4())})
+            submitted = payload.get("data") or {}
+            check("学生提交含解答题的作业",
+                  status == 200 and submitted.get("id"), payload.get("message", ""))
+
     status, payload = call("GET", "/teacher/review-queue", teacher_token)
     queue = payload.get("data") or []
     check("读取待复核队列", status == 200, "n=%d" % len(queue))
-    mine = next((item for item in queue if item.get("id") == record.get("id")), None)
-    if mine:
-        scores = {item["questionId"]: item.get("fullScore", 5) for item in mine.get("questionResults") or []}
-        status, payload = call("POST", "/teacher/review-queue/%s" % mine["id"], teacher_token, {
-            "collection": mine["collection"],
+    queued = next((item for item in queue if item.get("studentId") == student_user.get("id")), None)
+    if queued:
+        scores = {item["questionId"]: item.get("fullScore", 5)
+                  for item in queued.get("questionResults") or []}
+        status, payload = call("POST", "/teacher/review-queue/%s" % queued["id"], teacher_token, {
+            "collection": queued.get("collection"),
             "scores": scores,
             "comments": {},
         })
-        check("保存复核结果", status == 200 and (payload.get("data") or {}).get("status") in ("completed", "graded"))
+        check("保存复核结果", status == 200
+              and (payload.get("data") or {}).get("status") in ("completed", "graded"))
     else:
-        check("本次提交进入复核队列", False, "未找到 record=%s" % record.get("id"))
+        check("解答题进入复核队列", False, "队列中未找到该学生的答卷")
+
 
     print("== 5. 学情统计 ==")
     status, payload = call("GET", "/teacher/analytics/student/%s" % student_user.get("id"), teacher_token)
