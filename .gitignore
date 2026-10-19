@@ -112,3 +112,8 @@ backend/database/.jwt-secret
 backend/database/backups/
 output/playwright/
 .playwright-cli/
+
+# AI 工具个人配置不入库
+.agents/
+.claude/
+.trae/
