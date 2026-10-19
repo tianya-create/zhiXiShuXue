@@ -117,3 +117,5 @@ output/playwright/
 .agents/
 .claude/
 .trae/
+
+frontend/.verify-build*/
