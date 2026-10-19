@@ -10,10 +10,21 @@ const {
 const { gradeQuestions, synchronize } = require("../services/learning");
 const { getTrend } = require("../services/masteryEngine");
 const { uploadImage } = require("../services/uploads");
+const { expandKnowledgeIds, canonicalKnowledgeId } = require("../services/question-map");
 const router = express.Router();
 const studentOf = (req) =>
   db.findById("students", req.user.id) ||
   db.findOne("students", { userId: req.user.id });
+// 已学范围按教材节点配置，而题库里还有 kp-001/geo-3 这类老编号题目。
+// 校验时要把等价编号一起算进来，否则“取得到题、却提交不了”。
+const eligibleKpCodes = (studentId) => {
+  const codes = new Set();
+  for (const node of eligibleNodes(studentId)) {
+    codes.add(node.id);
+    for (const id of expandKnowledgeIds(node.id)) codes.add(id);
+  }
+  return codes;
+};
 const S = (id) =>
   db.findById("students", id) || db.findOne("students", { userId: id });
 const run = (handler) => (req, res, next) => {
@@ -90,7 +101,15 @@ function weak(student) {
   });
 }
 function changes(student, questions) {
-  return [...new Set(questions.map((item) => item.knowledgePointId))].map(
+  return [
+    ...new Set(
+      questions.map((item) =>
+        canonicalKnowledgeId(item.knowledgePointId || item.knowledgePoints?.[0]),
+      ),
+    ),
+  ]
+    .filter(Boolean)
+    .map(
     (id) => {
       const state = getColorStatus(student.id, id);
       return {
@@ -357,7 +376,7 @@ router.get(
       .split(",")
       .filter(Boolean);
     const ownWrong = wrongs(student);
-    const available = new Set(eligibleNodes(student.id).map((node) => node.id));
+    const available = eligibleKpCodes(student.id);
     const questions = requested.length
       ? requested
           .map((id) => db.findById("questions", id))
@@ -393,7 +412,7 @@ router.post(
       ...new Set(req.body.questionIds || Object.keys(req.body.answers || {})),
     ];
     if (!ids.length || ids.length > 20) throw new Error("请选择 1 到 20 道题");
-    const eligible = new Set(eligibleNodes(student.id).map((node) => node.id));
+    const eligible = eligibleKpCodes(student.id);
     const wrongIds = new Set(wrongs(student).map((item) => item.questionId));
     if (
       ids.some((id) => {
@@ -456,7 +475,7 @@ router.post(
 router.get(
   "/review-plan",
   run((req, res, student) => {
-    const eligible = new Set(eligibleNodes(student.id).map((node) => node.id));
+    const eligible = eligibleKpCodes(student.id);
     const data = db
       .find("studentQuestionAttempts", { studentId: student.id })
       .filter((item) => item.nextReviewAt)

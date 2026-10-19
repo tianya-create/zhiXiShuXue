@@ -1,4 +1,5 @@
 const db = require('../database/memory-db')
+const { expandKnowledgeIds } = require('./question-map')
 
 const GRAPH_NODES = [
   ['alg-1', '整式', '代数'], ['alg-2', '整式加减', '代数'], ['alg-3', '一元一次方程', '代数'], ['alg-4', '二元一次方程组', '代数'], ['alg-5', '一元二次方程', '代数'], ['alg-6', '一次函数', '代数'], ['alg-7', '反比例函数', '代数'], ['alg-8', '二次函数', '代数'],
@@ -194,9 +195,14 @@ function ensureManualQuestionBank() {
 
 function getQuestionBankByNode(filters = {}) {
   ensureManualQuestionBank()
+  // 教材树节点（alg-1…）与早期题库编号（kp-001…/geo-3）并存，取题时按等价集合展开，
+  // 否则 30 个目录节点里有一半会“点进去没有题”。
+  const targets = filters.knowledgePointId
+    ? new Set(expandKnowledgeIds(filters.knowledgePointId))
+    : null
   return db.find('questions').filter(item => {
     if (item.reviewStatus !== 'approved') return false;
-    if (filters.knowledgePointId && item.knowledgePointId !== filters.knowledgePointId && !(item.knowledgePoints || []).includes(filters.knowledgePointId)) return false
+    if (targets && !targets.has(item.knowledgePointId) && !(item.knowledgePoints || []).some(id => targets.has(id))) return false
     if (filters.difficulty && Number(item.difficultyLevel) !== Number(filters.difficulty)) return false
     if (filters.type && item.type !== filters.type) return false
     if (filters.reviewStatus && item.reviewStatus !== filters.reviewStatus) return false

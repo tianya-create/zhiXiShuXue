@@ -2,6 +2,7 @@ const db = require("../database/memory-db");
 const { gradeAnswer } = require("./autoGrade");
 const { updateMastery } = require("./masteryEngine");
 const { enrichQuestion } = require("./curriculum");
+const { canonicalKnowledgeId } = require("./question-map");
 function gradeQuestions(ids, answers, overrides = []) {
   return [...new Set(ids)].map((id) => {
     const question =
@@ -35,7 +36,11 @@ function synchronize(record) {
       !String(result.answer || "").trim()
     )
       continue;
-    const kpCode = question.knowledgePointId || question.knowledgePoints?.[0];
+    // 老题库题目挂在 kp-001/geo-3 这类编号上，统计前归一到教材目录节点，
+    // 否则学情与掌握度会按老编号落库，页面上 30 个节点全是空的。
+    const kpCode = canonicalKnowledgeId(
+      question.knowledgePointId || question.knowledgePoints?.[0],
+    );
     if (!kpCode) continue;
     affected.add(kpCode);
     const sourceRef = record.id + ":" + result.questionId;
