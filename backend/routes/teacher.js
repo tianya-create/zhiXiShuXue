@@ -994,47 +994,100 @@ router.post('/answers/:id/grade', (req, res) => {
   }
 });
 
+// 批改结果导出：生成真正的 .xlsx（原实现是 CSV，且前端 window.open 不带 token 会 401）
 router.get('/answers/export/excel', (req, res) => {
   try {
-    const answerList = db.find('answers').sort((a, b) => {
-      const studentA = db.findById('students', a.studentId) || db.findOne('students', { userId: a.studentId });
-      const studentB = db.findById('students', b.studentId) || db.findOne('students', { userId: b.studentId });
-      const nameA = studentA ? studentA.name : '';
-      const nameB = studentB ? studentB.name : '';
-      if (nameA !== nameB) return nameA.localeCompare(nameB, 'zh-CN');
-      return new Date(a.submittedAt || 0) - new Date(b.submittedAt || 0);
-    });
+    const XLSX = require('xlsx');
+    const studentOf = (id) =>
+      db.findById('students', id) || db.findOne('students', { userId: id });
 
-    const rows = answerList.map((answer, index) => {
-      const assignment = db.findById('assignments', answer.assignmentId);
-      const student = db.findById('students', answer.studentId) || db.findOne('students', { userId: answer.studentId });
-      const accuracy = buildAccuracyFromQuestionResults(answer.questionResults || []);
-      const studentName = student ? student.name : '未知学生';
-      const studentNo = student ? student.studentNo || '' : '';
-      const taskTitle = assignment ? assignment.title : (answer.title || '练习记录');
-      const testLabel = '第' + (index + 1) + '次记录';
+    // 满分：同一份作业/试卷只算一次
+    const fullScoreCache = new Map();
+    const fullScoreOf = (answer) => {
+      const key = answer.assignmentId || answer.paperId || answer.id;
+      if (fullScoreCache.has(key)) return fullScoreCache.get(key);
+      let total = 0;
+      const assignment = answer.assignmentId ? db.findById('assignments', answer.assignmentId) : null;
+      const questions =
+        assignment?.questionSnapshots ||
+        (assignment?.questionIds || db.findById('papers', assignment?.paperId || answer.paperId)?.questions || [])
+          .map((id) => db.findById('questions', id))
+          .filter(Boolean);
+      for (const question of questions) total += Number(question.score) || 0;
+      if (!total) total = (answer.questionResults || []).reduce((sum, item) => sum + (Number(item.fullScore) || 0), 0);
+      fullScoreCache.set(key, total);
+      return total;
+    };
 
-      return [
-        studentName,
-        studentNo,
-        testLabel,
-        taskTitle,
-        answer.recordType || 'homework',
-        answer.status || '',
-        String(answer.totalScore || 0),
-        String(accuracy) + '%',
-        answer.submittedAt || ''
-      ].join(',');
-    });
+    let answerList = db.find('answers');
+    if (req.query.classId) {
+      answerList = answerList.filter((answer) => {
+        const student = studentOf(answer.studentId);
+        return answer.classId === req.query.classId || (student && student.classId === req.query.classId);
+      });
+    }
+    if (req.query.assignmentId) {
+      answerList = answerList.filter((answer) => answer.assignmentId === req.query.assignmentId);
+    }
 
-    const header = '学生姓名,学号,测试序号,作业/练习名称,记录类型,状态,得分,正确率,提交时间';
-    const csv = [header].concat(rows).join('\n');
+    const statusText = (status) =>
+      ({ graded: '已批改', submitted: '待批改', reviewed: '已复核' }[status] || status || '');
+    const typeText = (type) =>
+      ({ homework: '作业', practice: '练习', exam: '测验' }[type] || type || '作业');
 
-    res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename=grading-results.csv');
-    res.send('\uFEFF' + csv);
+    const rows = answerList
+      .map((answer) => {
+        const student = studentOf(answer.studentId);
+        const cls = student?.classId ? db.findById('classes', student.classId) : null;
+        const assignment = answer.assignmentId ? db.findById('assignments', answer.assignmentId) : null;
+        const fullScore = fullScoreOf(answer);
+        const score = Number(answer.totalScore) || 0;
+        return {
+          学生姓名: student?.name || '未知学生',
+          学号: student?.studentNo || '',
+          班级: cls?.name || '',
+          作业练习名称: assignment?.title || answer.title || '练习记录',
+          记录类型: typeText(answer.recordType),
+          状态: statusText(answer.status),
+          得分: score,
+          满分: fullScore,
+          得分率: fullScore ? Math.min(100, Math.round((score / fullScore) * 100)) + '%' : '',
+          客观题正确率: buildAccuracyFromQuestionResults(answer.questionResults || []) + '%',
+          提交时间: answer.submittedAt ? new Date(answer.submittedAt).toLocaleString('zh-CN', { hour12: false }) : '',
+          批改时间: answer.gradedAt ? new Date(answer.gradedAt).toLocaleString('zh-CN', { hour12: false }) : '',
+          教师评语: answer.comments || ''
+        };
+      })
+      .sort((a, b) => {
+        const byName = String(a.学生姓名).localeCompare(String(b.学生姓名), 'zh-CN');
+        if (byName !== 0) return byName;
+        return String(a.提交时间).localeCompare(String(b.提交时间));
+      });
+
+    if (!rows.length) rows.push({ 学生姓名: '暂无批改记录' });
+
+    const sheet = XLSX.utils.json_to_sheet(rows);
+    sheet['!cols'] = [
+      { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 24 }, { wch: 10 },
+      { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 12 },
+      { wch: 20 }, { wch: 20 }, { wch: 28 }
+    ];
+    sheet['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length, c: 12 } }) };
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book, sheet, '批改结果');
+    const buffer = XLSX.write(book, { type: 'buffer', bookType: 'xlsx' });
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    const fileName = `批改结果_${stamp}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="grading-results-${stamp}.xlsx"; filename*=UTF-8''${encodeURIComponent(fileName)}`
+    );
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(buffer);
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: '导出失败：' + error.message });
   }
 });
 

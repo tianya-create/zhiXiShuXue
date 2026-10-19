@@ -661,6 +661,8 @@ function initializeData() {
 class Database {
   constructor() {
     this._version = 1;
+    this._idIndexes = new Map();
+    this._idIndexVersion = -1;
     this.data = persistentData(db);
     this.data.questions = loadQuestionsFromStore([]);
     if (process.env.NODE_ENV === 'production' && this.data.users.some(user => !user.disabled && ['admin123', 'teacher123', 'student123', '123456'].some(password => bcrypt.compareSync(password, user.password)))) throw new Error('生产环境禁止默认密码，请使用独立 DATA_DIR 初始化，或先重设现有账号密码');
@@ -745,8 +747,29 @@ class Database {
     return newItem;
   }
 
+  // 按 id 的索引：findById 原先每次都全表 find()（含逐条权限判断），
+  // 列表接口里动辄上千次调用。这里按数据版本缓存 Map<id, record>。
+  idIndex(collection) {
+    if (this._idIndexVersion !== this._version) {
+      this._idIndexes = new Map();
+      this._idIndexVersion = this._version;
+    }
+    let map = this._idIndexes.get(collection);
+    if (!map) {
+      map = new Map();
+      for (const item of this.data[collection] || []) {
+        if (!item || item.id === undefined || item.id === null) continue;
+        if (!map.has(item.id)) map.set(item.id, item);
+      }
+      this._idIndexes.set(collection, map);
+    }
+    return map;
+  }
+
   findById(collection, id) {
-    return this.find(collection).find(item => item.id === id);
+    const item = this.idIndex(collection).get(id);
+    if (!item) return undefined;
+    return require('../middleware/access').allowedRecord(collection, item) ? item : undefined;
   }
 
   find(collection, query = {}) {

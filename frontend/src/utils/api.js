@@ -47,7 +47,21 @@ var request = {
   post: function (url, data) { return api.post(url, data) },
   put: function (url, data) { return api.put(url, data) },
   delete: function (url) { return api.delete(url) },
-  upload: function (url, file) { const data = new FormData(); data.append('file', file); return api.post(url, data) }
+  upload: function (url, file) { const data = new FormData(); data.append('file', file); return api.post(url, data) },
+  // 带 token 的文件下载：axios 拿 blob，再触发浏览器另存为
+  download: function (url, params, fileName) {
+    return api.get(url, { params: params, responseType: 'blob', timeout: 120000 }).then(function (blob) {
+      var objectUrl = URL.createObjectURL(blob)
+      var link = document.createElement('a')
+      link.href = objectUrl
+      link.download = fileName || 'download.xlsx'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      setTimeout(function () { URL.revokeObjectURL(objectUrl) }, 1500)
+      return true
+    })
+  }
 }
 
 request.student = {

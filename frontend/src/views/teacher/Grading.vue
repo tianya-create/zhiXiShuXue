@@ -394,7 +394,14 @@ function submitGrade() {
 }
 
 function exportExcel() {
-  window.open('/api/teacher/answers/export/excel', '_blank')
+  var stamp = dayjs().format('YYYY-MM-DD')
+  api.download('/teacher/answers/export/excel', {}, '批改结果_' + stamp + '.xlsx')
+    .then(function() {
+      ElMessage.success('已导出 Excel')
+    })
+    .catch(function() {
+      ElMessage.error('导出失败，请稍后重试')
+    })
 }
 
 function getObjectiveSummary(row) {
