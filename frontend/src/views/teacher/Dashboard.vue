@@ -16,6 +16,42 @@
       </div>
     </section>
 
+    <section class="adaptive-overview">
+      <div class="adaptive-heading">
+        <div><span class="adaptive-kicker">认知—心理适配</span><h2>班级即时学习状态</h2></div>
+        <span>仅汇总学生主动提交的轮后感受</span>
+      </div>
+      <div class="adaptive-grid">
+        <div class="adaptive-card control-card">
+          <b>学业控制感</b>
+          <div class="distribution">
+            <span style="--bar:#e88972" :style="{ flex: Math.max(1, adaptive.controlDistribution.low) }">需支持 {{ adaptive.controlDistribution.low }}</span>
+            <span style="--bar:#e5bb5e" :style="{ flex: Math.max(1, adaptive.controlDistribution.medium) }">稳定 {{ adaptive.controlDistribution.medium }}</span>
+            <span style="--bar:#72b58b" :style="{ flex: Math.max(1, adaptive.controlDistribution.high) }">有把握 {{ adaptive.controlDistribution.high }}</span>
+          </div>
+          <small>已完成即时自评 {{ adaptive.assessedStudentCount }} / {{ adaptive.studentCount }} 人</small>
+          <div class="complexity-tags">
+            <span>低复杂度 {{ adaptive.taskComplexityDistribution.low }}</span>
+            <span>标准 {{ adaptive.taskComplexityDistribution.medium }}</span>
+            <span>高复杂度 {{ adaptive.taskComplexityDistribution.high }}</span>
+          </div>
+        </div>
+        <div class="adaptive-card preference-card">
+          <b>资源呈现偏好</b>
+          <div class="preference-tags">
+            <span>图形 V · {{ adaptive.preferenceDistribution.V }}</span>
+            <span>讲解 A · {{ adaptive.preferenceDistribution.A }}</span>
+            <span>文字 R · {{ adaptive.preferenceDistribution.R }}</span>
+            <span>练习 K · {{ adaptive.preferenceDistribution.K }}</span>
+          </div>
+          <small>混合偏好会同时计入两个通道，不作为能力标签。</small>
+        </div>
+        <button type="button" class="adaptive-card support-card" @click="goTo('/teacher/analytics/class')">
+          <strong>{{ adaptive.supportRequestCount }}</strong><b>条学生主动求助</b><small>只有学生主动点击后才会出现</small>
+        </button>
+      </div>
+    </section>
+
     <section class="stat-row">
       <button type="button" class="stat-tile" style="--tile: var(--nb-blue); --tile-soft: var(--nb-blue-soft)" @click="goTo('/teacher/students')">
         <span class="stat-icon"><el-icon><User /></el-icon></span>
@@ -129,6 +165,14 @@ const stats = ref({
 
 const recentAssignments = ref([])
 const classes = ref([])
+const adaptive = ref({
+  studentCount: 0,
+  assessedStudentCount: 0,
+  supportRequestCount: 0,
+  controlDistribution: { low: 0, medium: 0, high: 0 },
+  preferenceDistribution: { V: 0, A: 0, R: 0, K: 0 },
+  taskComplexityDistribution: { low: 0, medium: 0, high: 0 }
+})
 
 const quickActions = [
   { label: '上传试卷', desc: '把纸质卷或题目录进来', icon: 'Upload', path: '/teacher/papers', color: 'var(--nb-blue)', soft: 'var(--nb-blue-soft)' },
@@ -206,6 +250,9 @@ function loadData() {
         ? Math.round(graded.reduce(function(sum, item) { return sum + item.totalScore }, 0) / graded.length)
         : null
     }
+    return api.get('/teacher/adaptation/overview')
+  }).then(function(adaptiveRes) {
+    if (adaptiveRes.success) adaptive.value = adaptiveRes.data
   }).catch(function(error) {
     console.error('加载数据失败:', error)
   })
@@ -240,6 +287,13 @@ function loadData() {
 .stat-name { font-size: 15px; color: var(--nb-ink-2); }
 
 .board { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.adaptive-overview { padding: 22px; border: 1px solid var(--nb-line); border-radius: var(--nb-radius); background: var(--nb-sheet); box-shadow: var(--nb-shadow); }
+.adaptive-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 18px; margin-bottom: 15px; }.adaptive-heading h2 { margin: 3px 0 0; font-family: var(--nb-font-display); font-size: 24px; font-weight: 500; }.adaptive-heading > span { color: var(--nb-ink-3); font-size: 13px; }.adaptive-kicker { color: var(--nb-blue); font-size: 13px; font-weight: 800; }
+.adaptive-grid { display: grid; grid-template-columns: 1.4fr 1.2fr .7fr; gap: 13px; }.adaptive-card { padding: 15px; border: 1px solid var(--nb-line); border-radius: 12px; background: color-mix(in srgb, var(--nb-sheet) 92%, var(--nb-blue-soft)); color: var(--nb-ink); text-align: left; }.adaptive-card > b { display: block; margin-bottom: 11px; }.adaptive-card small { display: block; margin-top: 10px; color: var(--nb-ink-3); line-height: 1.45; }
+.distribution { display: flex; min-height: 54px; overflow: hidden; border-radius: 9px; }.distribution span { display: grid; place-items: center; min-width: 72px; padding: 8px; background: color-mix(in srgb, var(--bar) 28%, white); border-bottom: 4px solid var(--bar); font-size: 13px; text-align: center; }
+.preference-tags { display: flex; flex-wrap: wrap; gap: 7px; }.preference-tags span { padding: 7px 9px; border-radius: 8px; background: var(--nb-blue-soft); color: var(--nb-blue); font-size: 13px; font-weight: 700; }
+.complexity-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }.complexity-tags span { padding: 4px 7px; border-radius: 6px; background: rgba(255,255,255,.75); color: var(--nb-ink-2); font-size: 12px; }
+.support-card { border-color: #e3c676; background: #fff7cf; font: inherit; cursor: pointer; }.support-card strong { display: block; color: #9b6719; font-family: var(--nb-font-display); font-size: 40px; }.support-card b { margin-bottom: 0; }
 .section-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .section-title { font-family: var(--nb-font-display); font-weight: 400; font-size: 22px; color: var(--nb-ink); }
 
@@ -259,9 +313,11 @@ function loadData() {
 @media (max-width: 1200px) {
   .stat-row, .quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .board { grid-template-columns: minmax(0, 1fr); }
+  .adaptive-grid { grid-template-columns: 1fr 1fr; }.support-card { grid-column: span 2; }
 }
 @media (max-width: 560px) {
   .stat-row, .quick-grid { grid-template-columns: minmax(0, 1fr); }
   .today-main { font-size: 21px; }
+  .adaptive-grid { grid-template-columns: 1fr; }.support-card { grid-column: auto; }.adaptive-heading { align-items: flex-start; flex-direction: column; }
 }
 </style>

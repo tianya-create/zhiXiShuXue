@@ -1,16 +1,78 @@
 const db = require('../database/memory-db')
-const { expandKnowledgeIds } = require('./question-map')
-
 const GRAPH_NODES = [
   ['alg-1', '整式', '代数'], ['alg-2', '整式加减', '代数'], ['alg-3', '一元一次方程', '代数'], ['alg-4', '二元一次方程组', '代数'], ['alg-5', '一元二次方程', '代数'], ['alg-6', '一次函数', '代数'], ['alg-7', '反比例函数', '代数'], ['alg-8', '二次函数', '代数'],
   ['geo-1', '线段与角', '几何'], ['geo-2', '相交线与平行线', '几何'], ['geo-3', '三角形', '几何'], ['geo-4', '全等三角形', '几何'], ['geo-5', '相似三角形', '几何'], ['geo-6', '圆', '几何'], ['geo-7', '勾股定理', '几何'],
-  ['stat-1', '数据收集', '概率统计'], ['stat-2', '数据整理', '概率统计'], ['stat-3', '平均数中位数众数', '概率统计'], ['stat-4', '概率初步', '概率统计'], ['stat-5', '频率估计概率', '概率统计']
+  ['stat-1', '数据收集', '概率统计'], ['stat-2', '数据整理', '概率统计'], ['stat-3', '平均数中位数众数', '概率统计'], ['stat-4', '概率初步', '概率统计'], ['stat-5', '频率估计概率', '概率统计'],
+  ['number-1', '有理数与数轴', '代数'], ['number-2', '实数与平方根', '代数'], ['algebra-1', '整式乘法与乘法公式', '代数'], ['algebra-2', '因式分解', '代数'], ['algebra-3', '分式与分式运算', '代数'], ['algebra-4', '二次根式', '代数'], ['equation-1', '一元一次不等式与不等式组', '代数'], ['equation-2', '分式方程', '代数'], ['coordinate-1', '平面直角坐标系', '代数'], ['geometry-1', '三角形', '几何'], ['geometry-2', '全等与相似', '几何'], ['statistics-1', '数据分析', '概率统计']
 ]
+
+// 版本化补种：已有本地数据升级后只补充新增目录节点的题，不覆盖教师题或学生记录。
+const QUESTION_BANK_VERSION = 2
 
 const TYPE_MAP = { 选择: 'choice', 填空: 'fill', 解答: 'shortAnswer' }
 const DIFF_MAP = { 1: 'easy', 2: 'easy', 3: 'medium', 4: 'hard', 5: 'hard' }
 
 const QUESTION_BANK = {
+  'number-1': [
+    ['在数轴上，-3 在 0 的（ ）', ['左侧', '右侧', '上方', '下方'], '左侧', '负数在原点左侧。', 1, '选择'],
+    ['-5 的相反数是____。', [], '5', '相反数只有符号不同。', 1, '填空'],
+    ['比较 -2 和 -5 的大小：____。', [], '-2>-5', '数轴上右边的数较大。', 2, '填空']
+  ],
+  'number-2': [
+    ['下列数中是无理数的是（ ）', ['0.25', '√2', '-3', '1/5'], '√2', '√2 不能表示成两个整数的比。', 1, '选择'],
+    ['√49=____。', [], '7', '49 的算术平方根是 7。', 1, '填空'],
+    ['若 x²=16，则 x=____。', [], '±4', '平方根有两个互为相反数的值。', 2, '填空']
+  ],
+  'algebra-1': [
+    ['(x+2)(x+3) 的结果是（ ）', ['x²+5x+6', 'x²+6', 'x²+5x', 'x²+6x+6'], 'x²+5x+6', '按多项式乘法逐项相乘。', 2, '选择'],
+    ['(a+b)²=____。', [], 'a²+2ab+b²', '完全平方公式。', 2, '填空'],
+    ['计算 (x-4)(x+4)=____。', [], 'x²-16', '平方差公式。', 2, '填空']
+  ],
+  'algebra-2': [
+    ['x²-9 可分解为（ ）', ['(x-3)(x+3)', '(x-9)(x+1)', '(x-3)²', '不能分解'], '(x-3)(x+3)', '平方差公式。', 2, '选择'],
+    ['提取公因式：3x+6=____。', [], '3(x+2)', '先找公因式 3。', 1, '填空'],
+    ['x²+5x+6=____。', [], '(x+2)(x+3)', '找积为 6、和为 5 的两个数。', 3, '填空']
+  ],
+  'algebra-3': [
+    ['分式 x/3 的分母是（ ）', ['x', '3', 'x/3', '0'], '3', '分母不能为 0。', 1, '选择'],
+    ['约分：6x/9=____。', [], '2x/3', '分子分母同除以 3。', 1, '填空'],
+    ['计算 1/x+2/x=____。', [], '3/x', '同分母分式分子相加。', 2, '填空']
+  ],
+  'algebra-4': [
+    ['√12 可化简为（ ）', ['2√3', '3√2', '6', '√6'], '2√3', '12=4×3，√4=2。', 2, '选择'],
+    ['√8×√2=____。', [], '4', '√(8×2)=√16。', 2, '填空'],
+    ['最简二次根式 √18 化为____。', [], '3√2', '18=9×2。', 2, '填空']
+  ],
+  'equation-1': [
+    ['解不等式 2x>6，得（ ）', ['x>3', 'x<3', 'x>12', 'x<12'], 'x>3', '两边同除以正数 2，不等号方向不变。', 1, '选择'],
+    ['不等式 x-4≤2 的解集是____。', [], 'x≤6', '两边同加 4。', 1, '填空'],
+    ['若 -2x>4，则 x____-2。', [], '<', '同除以负数，不等号方向改变。', 2, '填空']
+  ],
+  'equation-2': [
+    ['解方程 1/x=1/2，x=（ ）', ['1', '2', '-2', '0'], '2', '交叉相乘或同乘 2x。', 2, '选择'],
+    ['分式方程 2/(x-1)=1 的解是____。', [], '3', '先验根 x≠1。', 2, '填空'],
+    ['解分式方程时，首先要写出____。', [], '增根条件', '分母不能为 0。', 2, '填空']
+  ],
+  'coordinate-1': [
+    ['点 (2,-3) 位于第（ ）象限', ['一', '二', '三', '四'], '四', '横坐标正、纵坐标负。', 1, '选择'],
+    ['点 (0,5) 在____轴上。', [], 'y', '横坐标为 0 的点在 y 轴。', 1, '填空'],
+    ['原点的坐标是____。', [], '(0,0)', '两条坐标轴交点。', 1, '填空']
+  ],
+  'geometry-1': [
+    ['三角形两边长为 3 和 5，第三边可以是（ ）', ['1', '2', '4', '8'], '4', '第三边大于两边之差且小于两边之和。', 2, '选择'],
+    ['等腰三角形的两个底角____。', [], '相等', '等边对等角。', 1, '填空'],
+    ['三角形内角和为____度。', [], '180', '三角形基本性质。', 1, '填空']
+  ],
+  'geometry-2': [
+    ['全等三角形的对应边（ ）', ['相等', '成比例', '互补', '不确定'], '相等', '全等对应元素相等。', 1, '选择'],
+    ['相似三角形的对应角____。', [], '相等', '相似保持角相等。', 1, '填空'],
+    ['相似比为 2:1 的两个三角形面积比是____。', [], '4:1', '面积比等于相似比的平方。', 3, '填空']
+  ],
+  'statistics-1': [
+    ['一组数据中出现次数最多的数叫（ ）', ['平均数', '中位数', '众数', '方差'], '众数', '众数反映最常出现的数。', 1, '选择'],
+    ['数据 2、4、6 的平均数是____。', [], '4', '总和除以个数。', 1, '填空'],
+    ['要比较两组成绩的波动大小，可用____描述。', [], '方差', '方差越小，数据越稳定。', 2, '填空']
+  ],
   'alg-1': [
     ['下列式子中是单项式的是（ ）', ['3x', 'x+1', 'a/b', 'x-y'], '3x', '单项式只含乘法与乘方。', 1, '选择'],
     ['若 2a+3a=____', [], '5a', '同类项系数相加。', 1, '填空'],
@@ -171,7 +233,11 @@ function buildQuestion(kpId, kpName, domain, index, row) {
     difficulty: DIFF_MAP[difficultyLevel],
     questionTypeLabel: typeLabel,
     type: TYPE_MAP[typeLabel],
-    reviewStatus: 'pending',
+    // 平台内置题库经过人工整理，包含标准答案与解析；新建题目仍保持待审核。
+    reviewStatus: 'approved',
+    reviewedBy: 'system-seed',
+    reviewedAt: new Date().toISOString(),
+    qualityVersion: 1,
     source: 'manual-curated',
     score: difficultyLevel <= 2 ? 8 : difficultyLevel === 3 ? 12 : 16,
     createdAt: new Date().toISOString(),
@@ -180,7 +246,7 @@ function buildQuestion(kpId, kpName, domain, index, row) {
 }
 
 function ensureManualQuestionBank() {
-  if (db.data.settings.questionBankInitialized) return;
+  if (Number(db.data.settings.questionBankVersion || 0) >= QUESTION_BANK_VERSION) return
   const all = db.find('questions')
   const existingIds = new Set(all.map(item => item.id))
   GRAPH_NODES.forEach(([kpId, kpName, domain]) => {
@@ -190,7 +256,8 @@ function ensureManualQuestionBank() {
       if (!existingIds.has(question.id)) db.create('questions', question)
     })
   })
-  db.data.settings.questionBankInitialized = true;
+  db.data.settings.questionBankInitialized = true
+  db.data.settings.questionBankVersion = QUESTION_BANK_VERSION
 }
 
 // 题库倒排索引：按数据版本缓存，避免每个请求对 2000+ 道题反复全表扫描。
@@ -217,11 +284,11 @@ function bankIndex() {
 
 function getQuestionBankByNode(filters = {}) {
   ensureManualQuestionBank()
-  // 教材树节点（alg-1…）与早期题库编号（kp-001…/geo-3）并存，取题时按等价集合展开，
-  // 否则 30 个目录节点里有一半会“点进去没有题”。
   const index = bankIndex()
+  // 知识图谱中的一个节点只展示明确标注到该节点的题。不能通过相近概念展开，
+  // 否则同一题会落到多个节点，学生会误以为在反复刷同一题。
   const groups = filters.knowledgePointId
-    ? expandKnowledgeIds(filters.knowledgePointId).map(id => index.get(id) || [])
+    ? [index.get(filters.knowledgePointId) || []]
     : [...index.values()]
   const seen = new Set()
   const result = []

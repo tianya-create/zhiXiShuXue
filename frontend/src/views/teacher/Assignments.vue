@@ -116,6 +116,11 @@
               :label="buildQuestionLabel(q)"
               :value="q.id"
             />
+            <template #empty>
+              <div class="question-bank-empty">
+                当前筛选下没有可发布的已审核题目。请调整知识点或难度筛选，或先在题库管理中补充题目并完成审核。
+              </div>
+            </template>
           </el-select>
           <div class="selected-question-summary">
             已选 {{ form.questionIds.length }} 题
@@ -502,6 +507,13 @@ function formatDate(date) {
   margin-top: 8px;
   color: var(--nb-ink-3);
   font-size: 14px;
+}
+
+.question-bank-empty {
+  padding: 12px 14px;
+  color: var(--nb-ink-3);
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .question-filter-panel {

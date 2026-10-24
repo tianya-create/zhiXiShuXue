@@ -32,6 +32,19 @@ function normalizeQuestion(input, existing = {}, actor) {
   question.difficulty = ["easy", "medium", "hard"].includes(question.difficulty)
     ? question.difficulty
     : "medium";
+  question.taskComplexity = ["low", "medium", "high"].includes(
+    question.taskComplexity,
+  )
+    ? question.taskComplexity
+    : question.difficulty === "easy"
+      ? "low"
+      : question.difficulty === "hard"
+        ? "high"
+        : "medium";
+  question.scaffoldSteps = Array.isArray(question.scaffoldSteps)
+    ? question.scaffoldSteps.map((item) => String(item).trim()).filter(Boolean).slice(0, 8)
+    : [];
+  question.conciseStem = String(question.conciseStem || "").trim().slice(0, 1000);
   if (
     !question.content ||
     !question.answer ||
@@ -110,12 +123,27 @@ function publicQuestion(question) {
     analysis,
     explanation,
     rubric,
+    hints,
+    scaffoldSteps,
+    conciseStem,
     ...safe
   } = question;
   return safe;
 }
 function migrateQuestionQuality() {
   for (const question of db.find("questions")) {
+    // 仅将随系统提供、含完整解析的演示题库设为预审通过，
+    // 不影响教师或管理员后续录入题目的审核工作流。
+    if (question.source === "manual-curated" && question.reviewStatus !== "approved") {
+      db.updateById("questions", question.id, {
+        ...question,
+        reviewStatus: "approved",
+        reviewedBy: question.reviewedBy || "system-seed",
+        reviewedAt: question.reviewedAt || new Date().toISOString(),
+        qualityVersion: 1,
+      });
+      continue;
+    }
     if (question.qualityVersion === 1) continue;
     const update = {
       ...enrichQuestion(question),

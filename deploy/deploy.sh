@@ -47,8 +47,29 @@ if [ ! -f ".env" ]; then
   fi
 fi
 
-# 供后端 dotenv 读取（后端 WORKDIR 为 /app，对应 backend/）
-cp -f .env backend/.env 2>/dev/null || true
+# docker compose 会把根目录 .env 注入后端容器；不要复制到 backend/.env，
+# 否则密钥可能被 Docker 构建上下文写入镜像层。
+
+# 生产环境首次初始化必须有独立的管理员密码和应用密钥。
+JWT_SECRET_VALUE=""
+ADMIN_PASSWORD_VALUE=""
+for name in JWT_SECRET SETTINGS_SECRET APP_SECRET ADMIN_PASSWORD; do
+  value="$(grep -E "^${name}=" .env | head -n 1 | cut -d '=' -f2- || true)"
+  if [ -z "$value" ] || [[ "$value" == replace-with-* ]] || [[ "$value" == please-change-* ]]; then
+    error ".env 中必须填写安全的 ${name}，不能保留示例占位值"
+    exit 1
+  fi
+  if [ "$name" = "JWT_SECRET" ]; then JWT_SECRET_VALUE="$value"; fi
+  if [ "$name" = "ADMIN_PASSWORD" ]; then ADMIN_PASSWORD_VALUE="$value"; fi
+done
+if [ "${#JWT_SECRET_VALUE}" -lt 32 ]; then
+  error "JWT_SECRET 至少需要 32 位字符"
+  exit 1
+fi
+if [ "${#ADMIN_PASSWORD_VALUE}" -lt 12 ]; then
+  error "ADMIN_PASSWORD 至少需要 12 位字符"
+  exit 1
+fi
 
 # 提示未填写的 AI Key
 if grep -qE '^(LLM_API_KEY|AI_TUTOR_API_KEY|BAILIAN_API_KEY)=$' .env; then
@@ -84,7 +105,8 @@ PUBLIC_IP="$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || echo '<
 echo
 info "部署完成！"
 echo -e "  访问地址：${GREEN}http://${PUBLIC_IP}${NC}"
-echo "  演示账号：student-demo / student123"
+echo "  首次登录：admin / 你在 .env 中设置的 ADMIN_PASSWORD"
+echo "  教师和学生账号请在管理端创建或导入"
 echo
 echo "常用命令："
 echo "  查看日志： $DC logs -f backend"

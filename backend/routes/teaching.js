@@ -144,7 +144,11 @@ router.put(
   run((req, res) => {
     const existing = db.findById("questions", req.params.id);
     if (!existing) throw new Error("题目不存在");
-    if (req.user.role === "teacher" && existing.createdBy !== req.user.id)
+    if (
+      req.user.role === "teacher" &&
+      existing.createdBy &&
+      existing.createdBy !== req.user.id
+    )
       return res
         .status(403)
         .json({ success: false, message: "仅可修改自己录入的题目" });
@@ -170,7 +174,11 @@ router.post(
   run((req, res) => {
     const existing = db.findById("questions", req.params.id);
     if (!existing) throw new Error("题目不存在");
-    if (req.user.role === "teacher" && existing.createdBy !== req.user.id)
+    if (
+      req.user.role === "teacher" &&
+      existing.createdBy &&
+      existing.createdBy !== req.user.id
+    )
       return res
         .status(403)
         .json({ success: false, message: "请管理员审核公共题目" });

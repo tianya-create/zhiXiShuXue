@@ -40,6 +40,23 @@
         </el-table-column>
       </el-table>
     </el-card>
+
+    <el-card v-if="studentId" class="gradient-card adaptive-history-card">
+      <template #header>认知—心理适配记录</template>
+      <div v-if="adaptiveHistory.profile" class="profile-summary">
+        <b>当前资源呈现偏好</b>
+        <el-tag v-for="dimension in adaptiveHistory.profile.primaryDimensions" :key="dimension" effect="plain">{{ preferenceLabel(dimension) }}</el-tag>
+        <span v-if="adaptiveHistory.profile.mixed">混合偏好</span>
+      </div>
+      <el-empty v-if="!adaptiveHistory.assessments.length" description="该学生还没有提交轮后感受" :image-size="72" />
+      <el-table v-else :data="adaptiveHistory.assessments.slice(0, 10)" max-height="360">
+        <el-table-column label="时间" min-width="150"><template #default="scope">{{ formatTime(scope.row.createdAt) }}</template></el-table-column>
+        <el-table-column prop="knowledgePointId" label="知识点" min-width="130" />
+        <el-table-column label="控制感" width="100"><template #default="scope"><el-tag :type="controlTag(scope.row.controlLevel)">{{ controlLabel(scope.row.controlLevel) }}</el-tag></template></el-table-column>
+        <el-table-column prop="controlScore" label="均分" width="75" />
+        <el-table-column prop="mentalEffort" label="心理努力" width="95" />
+      </el-table>
+    </el-card>
     
     <el-card v-if="studentId" class="gradient-card analytics-card" v-loading="loading">
       <template #header>
@@ -119,6 +136,7 @@ var router = useRouter()
 var loading = ref(false)
 var studentInfo = ref(null)
 var analytics = ref(null)
+var adaptiveHistory = ref({ assessments: [], decisions: [], profile: null })
 var scoreChartRef = ref(null)
 var knowledgeChartRef = ref(null)
 var levelChartRef = ref(null)
@@ -168,6 +186,7 @@ onBeforeUnmount(function() {
 })
 
 watch(studentId, function(newId) {
+  adaptiveHistory.value = { assessments: [], decisions: [], profile: null }
   if (newId) {
     loadAnalytics()
   } else {
@@ -212,7 +231,12 @@ function loadAnalytics() {
     if (res.success) {
       studentInfo.value = res.data.student
       analytics.value = res.data
-      return nextTick()
+      return api.get('/teacher/adaptation/students/' + studentId.value + '/history')
+        .then(function(adaptiveRes) {
+          if (adaptiveRes.success) adaptiveHistory.value = adaptiveRes.data
+        })
+        .catch(function() {})
+        .then(function() { return nextTick() })
     }
   }).then(function() {
     renderCharts()
@@ -221,6 +245,22 @@ function loadAnalytics() {
   }).finally(function() {
     loading.value = false
   })
+}
+
+function preferenceLabel(value) {
+  return ({ V: '图示优先', A: '讲解示范优先', R: '规范文字优先', K: '练习试错优先' })[value] || value
+}
+
+function controlLabel(value) {
+  return ({ low: '需支持', medium: '较稳定', high: '有把握' })[value] || value
+}
+
+function controlTag(value) {
+  return ({ low: 'warning', medium: 'info', high: 'success' })[value] || 'info'
+}
+
+function formatTime(value) {
+  return value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '-'
 }
 
 const knowledgePointMap = {
@@ -665,6 +705,7 @@ function exportPDF() {
 }
 
 .analytics-card,
+.adaptive-history-card,
 .wrong-section-card,
 .chart-card {
   margin-top: 20px;
@@ -674,6 +715,9 @@ function exportPDF() {
   box-sizing: border-box;
   overflow: hidden;
 }
+
+.profile-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; padding: 11px 13px; border-radius: 10px; background: var(--nb-blue-soft); color: var(--nb-ink-2); }
+.profile-summary b { margin-right: 4px; color: var(--nb-ink); }
 
 .student-list-header,
 .analytics-toolbar,

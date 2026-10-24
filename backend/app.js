@@ -108,6 +108,7 @@ app.use(
   roles("teacher"),
   privateResponse,
   teacherGuard,
+  require("./routes/teacher-adaptation"),
   teachingRoutes,
   teacherRoutes,
 );
@@ -116,6 +117,7 @@ app.use(
   authenticate,
   roles("student"),
   privateResponse,
+  require("./routes/student-adaptation"),
   studentRoutes,
 );
 app.use(

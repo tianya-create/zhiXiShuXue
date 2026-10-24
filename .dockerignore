@@ -1,0 +1,13 @@
+node_modules
+frontend/node_modules
+backend/node_modules
+frontend/dist
+.git
+.env
+backend/.env
+backend/database/*.sqlite
+backend/database/*.sqlite-*
+backend/database/.jwt-secret
+backend/uploads
+coverage
+.jest-cache

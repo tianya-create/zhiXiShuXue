@@ -288,6 +288,8 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 28px;
+  /* 给固定在右下角的助教留出页尾安全区，避免遮挡最后一张卡片。 */
+  padding-bottom: 132px;
 }
 
 /* ---------- 问候 ---------- */

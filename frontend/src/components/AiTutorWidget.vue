@@ -8,13 +8,11 @@
       type="button"
       @click="panelVisible = true"
     >
-      <div class="fab-glow"></div>
-      <span class="fab-ai-badge">AI</span>
+      <img class="fab-teacher" src="/images/pixel-math-teacher.png" alt="" aria-hidden="true">
       <div class="fab-content">
         <strong>小智助教</strong>
-        <span>初中数学辅导</span>
+        <span>和老师一起想</span>
       </div>
-      <div class="fab-pulse"></div>
     </button>
 
     <!-- 面板 -->
@@ -24,7 +22,7 @@
         <header class="panel-header">
           <div class="header-left">
             <div class="panel-avatar">
-              <span>AI</span>
+              <img src="/images/pixel-math-teacher.png" alt="" aria-hidden="true">
             </div>
             <div class="header-text">
               <div class="panel-title">小智助教</div>
@@ -96,7 +94,7 @@
             :class="['message-item', item.role]"
           >
             <div v-if="item.role === 'assistant'" class="message-avatar assistant-avatar">
-              <span>AI</span>
+              <img src="/images/pixel-math-teacher.png" alt="" aria-hidden="true">
             </div>
             <div class="message-bubble">
               <div class="message-text" v-html="renderMath(item.content)"></div>
@@ -108,7 +106,7 @@
 
           <div v-if="loading" class="message-item assistant is-loading-item">
             <div class="message-avatar assistant-avatar">
-              <span>AI</span>
+              <img src="/images/pixel-math-teacher.png" alt="" aria-hidden="true">
             </div>
             <div class="message-bubble is-loading-bubble">
               <div class="loading-dots">
@@ -341,74 +339,42 @@ onMounted(function () {
 /* === 浮动按钮 === */
 .ai-tutor-fab {
   position: relative;
-  width: 96px;
+  width: 92px;
   min-height: 96px;
-  border: none;
-  border-radius: 24px;
-  padding: 0;
-  background: var(--brand-gradient);
-  color: #fff;
-  box-shadow: var(--brand-glow);
+  border: 1px solid #b9d6f5;
+  border-radius: 20px 20px 16px 16px;
+  padding: 6px 6px 8px;
+  background: rgba(255, 255, 255, .96);
+  color: var(--nb-ink, #173a7b);
+  box-shadow: 0 12px 28px -16px rgba(24, 87, 164, .6);
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0;
-  overflow: hidden;
+  gap: 2px;
+  overflow: visible;
   transition: all var(--duration-normal) var(--ease-spring);
 }
 
 .ai-tutor-fab:hover {
-  transform: scale(1.06) translateY(-2px);
-  box-shadow: 0 16px 40px hsla(var(--brand-hue), 84%, 68%, 0.4);
+  transform: translateY(-4px) rotate(-1deg);
+  border-color: #4c9af3;
+  box-shadow: 0 18px 32px -16px rgba(24, 87, 164, .58);
 }
 
 .ai-tutor-fab:active {
   transform: scale(1.02);
 }
 
-.fab-glow {
-  position: absolute;
-  top: -20px;
-  right: -20px;
-  width: 60px;
-  height: 60px;
-  background: hsla(0, 0%, 100%, 0.2);
-  border-radius: 50%;
-  filter: blur(16px);
-  pointer-events: none;
-}
-
-.fab-pulse {
-  position: absolute;
-  inset: 0;
-  border-radius: 24px;
-  background: var(--brand-gradient);
-  animation: fab-pulse 2.5s ease-in-out infinite;
-}
-
-@keyframes fab-pulse {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.08); opacity: 0.85; }
-}
-
-.fab-ai-badge {
+.fab-teacher {
   position: relative;
   z-index: 1;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: hsla(0, 0%, 100%, 0.25);
-  backdrop-filter: blur(8px);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  font-size: 13px;
-  letter-spacing: 0.05em;
-  margin-top: 14px;
-  border: 1.5px solid hsla(0, 0%, 100%, 0.3);
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 4px 3px rgba(34, 80, 142, .18));
 }
 
 .fab-content {
@@ -417,21 +383,20 @@ onMounted(function () {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  margin-top: 8px;
-  margin-bottom: 14px;
+  gap: 0;
+  margin: -2px 0 0;
 }
 
 .fab-content strong {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
 
 .fab-content span {
   font-size: 10px;
-  opacity: 0.8;
-  font-weight: 500;
+  color: var(--nb-ink-3, #5b76a2);
+  font-weight: 600;
 }
 
 /* === 面板主体 === */
@@ -471,7 +436,7 @@ onMounted(function () {
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  background: hsla(0, 0%, 100%, 0.2);
+  background: rgba(255, 255, 255, .2);
   backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
@@ -481,6 +446,7 @@ onMounted(function () {
   border: 1.5px solid hsla(0, 0%, 100%, 0.25);
   box-shadow: 0 2px 8px hsla(0, 0%, 0%, 0.1);
 }
+.panel-avatar img { width: 36px; height: 36px; object-fit: contain; image-rendering: pixelated; }
 
 .header-text { display: flex; flex-direction: column; gap: 2px; }
 
@@ -719,9 +685,16 @@ onMounted(function () {
 }
 
 .assistant-avatar {
-  background: var(--brand-gradient);
-  color: white;
-  box-shadow: var(--brand-glow);
+  overflow: hidden;
+  background: #e7f4ff;
+  border: 1px solid #b9d6f5;
+}
+
+.assistant-avatar img {
+  width: 27px;
+  height: 27px;
+  object-fit: contain;
+  image-rendering: pixelated;
 }
 
 .ai-user-avatar {
@@ -877,24 +850,15 @@ onMounted(function () {
   }
 
   .ai-tutor-fab {
-    width: 64px;
-    min-height: 64px;
-    border-radius: 18px;
+    width: 68px;
+    min-height: 76px;
+    border-radius: 16px;
+    padding: 4px;
   }
 
-  .fab-content span,
-  .fab-content strong {
-    display: none;
-  }
-
-  .fab-ai-badge {
-    margin-top: 0;
-  }
-
-  .fab-content {
-    margin-bottom: 0;
-    margin-top: 0;
-  }
+  .fab-teacher { width: 48px; height: 48px; }
+  .fab-content span { display: none; }
+  .fab-content strong { font-size: 11px; }
 
   .ai-tutor-panel {
     width: min(340px, calc(100vw - 16px));

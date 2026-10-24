@@ -24,6 +24,11 @@
     <img v-if="question.imageUrl" :src="question.imageUrl" alt="题目附图" style="max-width:100%;max-height:300px" />
     <QuestionTools :question="question" :answered="!!result" />
 
+    <details v-if="!result && question.adaptiveScaffoldSteps?.length" class="q-scaffold">
+      <summary>需要时展开分步提示</summary>
+      <ol><li v-for="step in question.adaptiveScaffoldSteps" :key="step"><MathText :text="step" /></li></ol>
+    </details>
+
     <!-- 选择题 -->
     <div v-if="isChoice" class="q-options" role="radiogroup" :aria-label="'第 ' + (index + 1) + ' 题选项'">
       <label
@@ -199,6 +204,8 @@ function isAnswerOption(option, idx) {
   line-height: 1.8;
   color: var(--nb-ink);
 }
+.q-scaffold { margin-top: 12px; padding: 10px 13px; border: 1px dashed var(--nb-blue); border-radius: 9px; background: var(--nb-blue-soft); color: var(--nb-ink-2); }
+.q-scaffold summary { color: var(--nb-blue); font-weight: 700; cursor: pointer; }.q-scaffold ol { margin: 10px 0 0; padding-left: 24px; }.q-scaffold li { margin: 6px 0; line-height: 1.55; }
 
 /* ---------- 选项 ---------- */
 .q-options {

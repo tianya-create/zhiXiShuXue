@@ -11,6 +11,14 @@ const { gradeQuestions, synchronize } = require("../services/learning");
 const { getTrend } = require("../services/masteryEngine");
 const { uploadImage } = require("../services/uploads");
 const { expandKnowledgeIds, canonicalKnowledgeId } = require("../services/question-map");
+const {
+  complexityOf,
+  createLearningRound,
+  isEnabledForKnowledgePoint,
+  latestDecision,
+  presentationMode,
+  presentationProfile,
+} = require("../services/adaptive-learning");
 const router = express.Router();
 const studentOf = (req) =>
   db.findById("students", req.user.id) ||
@@ -70,10 +78,16 @@ function practiceQuestions(student, kp) {
     .getAllMistakesForStudent(student.id)
     .filter((item) => !item.isResolved)
     .map((item) => item.questionId);
+  const target = latestDecision(student.id, kp)?.targetComplexity;
+  const complexityRank = { low: 0, medium: 1, high: 2 };
   return getQuestionBankByNode({ knowledgePointId: kp })
     .sort(
       (a, b) =>
         Number(mistakes.includes(b.id)) - Number(mistakes.includes(a.id)) ||
+        (target
+          ? Math.abs(complexityRank[complexityOf(a)] - complexityRank[target]) -
+            Math.abs(complexityRank[complexityOf(b)] - complexityRank[target])
+          : 0) ||
         a.difficultyLevel - b.difficultyLevel,
     )
     .slice(0, 6);
@@ -247,7 +261,14 @@ router.post(
         throw new Error("提交编号已被使用");
       return res.json({
         success: true,
-        data: { ...repeat.existing, answerId: repeat.existing.id },
+        data: {
+          ...repeat.existing,
+          answerId: repeat.existing.id,
+          learningRound: db.findOne("learningRounds", {
+            studentId: student.id,
+            sourceRecordId: repeat.existing.id,
+          }),
+        },
       });
     }
     if (latest(assignment.id, student.id))
@@ -301,12 +322,25 @@ router.post(
       if (draft) db.deleteById("drafts", draft.id);
       return value;
     });
+    const adaptiveQuestions = questions.filter((item) =>
+      isEnabledForKnowledgePoint(item.knowledgePointId || item.knowledgePoints?.[0]),
+    );
+    const learningRound = adaptiveQuestions.length
+      ? createLearningRound({
+          student,
+          sourceType: "assignment",
+          sourceRecord: record,
+          questions: adaptiveQuestions,
+          knowledgePointId: adaptiveQuestions[0].knowledgePointId,
+        })
+      : null;
     res.json({
       success: true,
       data: {
         ...record,
         answerId: record.id,
         knowledgePointChanges: changes(student, questions),
+        learningRound,
       },
     });
   }),
@@ -381,6 +415,8 @@ router.get(
       .filter(Boolean);
     const ownWrong = wrongs(student);
     const available = eligibleKpCodes(student.id);
+    const nodeInClassScope = eligibleNodes(student.id).some((node) => node.id === kp);
+    const approvedQuestionCount = getQuestionBankByNode({ knowledgePointId: kp }).length;
     const questions = requested.length
       ? requested
           .map((id) => db.findById("questions", id))
@@ -393,15 +429,39 @@ router.get(
           )
       : practiceQuestions(student, kp);
     const node = nodes.find((item) => item.id === kp);
+    const decision = latestDecision(student.id, kp);
+    const profile = presentationProfile(student.id);
+    const presentedQuestions = questions.map((question) => {
+      const safe = publicQuestion(question);
+      if (decision?.pageDensity === "low" && question.conciseStem)
+        safe.content = question.conciseStem;
+      if (decision?.scaffoldLevel === "high")
+        safe.adaptiveScaffoldSteps = question.scaffoldSteps?.length
+          ? question.scaffoldSteps
+          : question.hints || [];
+      else if (decision?.scaffoldLevel === "medium")
+        safe.adaptiveScaffoldSteps = (question.hints || []).slice(0, 2);
+      return safe;
+    });
     res.json({
       success: true,
       data: {
-        questions: questions.map(publicQuestion),
+        questions: presentedQuestions,
         knowledgePointId: kp,
         title: requested.length
           ? "错题重做"
           : (node?.name || "知识点") + "专项练习",
         mode: requested.length ? "wrong-question" : "weak-point",
+        adaptation: decision,
+        presentationMode: presentationMode(profile),
+        emptyReason:
+          presentedQuestions.length
+            ? ""
+            : !nodeInClassScope
+              ? "这个知识点暂未纳入班级已学范围，请让老师在“班级管理 → 已学范围”中确认后再练习。"
+              : !approvedQuestionCount
+                ? "这个知识点暂时没有审核通过的题目，请让老师在题库中补充或审核题目。"
+                : "当前没有符合练习条件的题目，请稍后再试。",
       },
     });
   }),
@@ -410,8 +470,18 @@ router.post(
   "/practice/:knowledgePointId/submit",
   run((req, res, student) => {
     const repeat = idempotent(req, student, "learningRecords");
-    if (repeat.existing)
-      return res.json({ success: true, data: repeat.existing });
+    if (repeat.existing) {
+      return res.json({
+        success: true,
+        data: {
+          ...repeat.existing,
+          learningRound: db.findOne("learningRounds", {
+            studentId: student.id,
+            sourceRecordId: repeat.existing.id,
+          }),
+        },
+      });
+    }
     const ids = [
       ...new Set(req.body.questionIds || Object.keys(req.body.answers || {})),
     ];
@@ -473,7 +543,14 @@ router.post(
           : "本次练习已保存，请结合解析检查解题过程。",
       });
     });
-    res.json({ success: true, data: record });
+    const learningRound = createLearningRound({
+      student,
+      sourceType: "practice",
+      sourceRecord: record,
+      questions,
+      knowledgePointId: req.params.knowledgePointId,
+    });
+    res.json({ success: true, data: { ...record, learningRound } });
   }),
 );
 router.get(

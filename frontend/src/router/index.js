@@ -106,6 +106,18 @@ const routes = [
         meta: { title: '学生首页' }
       },
       {
+        path: 'presentation-preference',
+        name: 'StudentPresentationPreference',
+        component: function () { return import('@/views/student/PresentationPreference.vue') },
+        meta: { title: '学习资源偏好设置' }
+      },
+      {
+        path: 'adaptive-feedback/:roundId',
+        name: 'StudentAdaptiveFeedback',
+        component: function () { return import('@/views/student/AdaptiveFeedback.vue') },
+        meta: { title: '本轮学习反馈' }
+      },
+      {
         path: 'assignments',
         name: 'StudentAssignments',
         component: function () { return import('@/views/student/Assignments.vue') },

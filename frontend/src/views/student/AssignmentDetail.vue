@@ -101,12 +101,14 @@
         <el-button type="primary" size="large" :loading="submitting" @click="submitAnswers">交卷</el-button>
       </div>
     </div>
+    <AdaptiveReflectionDialog v-model="reflectionVisible" :round="pendingRound" @completed="handleReflectionCompleted" />
   </div>
 </template>
 
 <script setup>
 import MathText from '@/components/MathText.vue'
 import QuestionTools from '@/components/QuestionTools.vue'
+import AdaptiveReflectionDialog from '@/components/adaptive/AdaptiveReflectionDialog.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -117,6 +119,9 @@ var route = useRoute()
 var router = useRouter()
 var loading = ref(false)
 var submitting = ref(false)
+const reflectionVisible = ref(false)
+const pendingRound = ref(null)
+const submittedAnswerId = ref('')
 
 var assignment = ref(null)
 const paper = ref(null)
@@ -257,10 +262,12 @@ function submitAnswers() {
         draft.clear()
         ElMessage.success('已交卷')
         if (res.data && res.data.answerId) {
+          submittedAnswerId.value = res.data.answerId
           sessionStorage.setItem('latest-answer-' + route.params.id, res.data.answerId)
         }
-        router.replace('/student/assignment/' + route.params.id + '?view=result')
-        loadResults()
+        pendingRound.value = res.data?.learningRound || null
+        if (pendingRound.value?.reflectionRequired) reflectionVisible.value = true
+        else finishSubmission()
       }
     }).catch(function() {
       ElMessage.error('提交失败')
@@ -268,6 +275,23 @@ function submitAnswers() {
       submitting.value = false
     })
   }).catch(function() {})
+}
+
+function finishSubmission() {
+  router.replace('/student/assignment/' + route.params.id + '?view=result')
+  loadResults()
+}
+
+function handleReflectionCompleted() {
+  if (!pendingRound.value?.id) {
+    finishSubmission()
+    return
+  }
+  router.replace({
+    name: 'StudentAdaptiveFeedback',
+    params: { roundId: pendingRound.value.id },
+    query: { source: 'assignment', assignmentId: route.params.id }
+  })
 }
 
 async function uploadAnswer(event) {

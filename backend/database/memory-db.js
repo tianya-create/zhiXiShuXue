@@ -35,6 +35,13 @@ const db = {
   uploadedFiles: [],
   questionReports: [],
   recommendationLogs: [],
+  learningRounds: [],
+  controlAssessments: [],
+  adaptationDecisions: [],
+  learnerPresentationProfiles: [],
+  presentationLearningEvidence: [],
+  presentationAdjustmentEvents: [],
+  teacherSupportRequests: [],
   knowledgeGraphNodes: [],
   knowledgeGraphWrong: [],
   knowledgeGraphRecommend: [],
@@ -171,7 +178,17 @@ function initializeData() {
     maxUploadSize: 10, // MB
     allowedFileTypes: ['jpg', 'jpeg', 'png', 'pdf'],
     systemName: '智析数学',
-    logo: '/logo.png'
+    logo: '/logo.png',
+    adaptiveLearning: {
+      enabled: true,
+      ruleVersion: 'adaptive-v1.0',
+      controlLowMax: 2.4,
+      controlHighMin: 3.8,
+      highEffortMin: 4,
+      accuracyLowMax: 0.6,
+      accuracyHighMin: 0.85,
+      enabledKnowledgePointIds: ['alg-1', 'alg-2', 'algebra-3', 'alg-3']
+    }
   }
 
   // 初始化题目数据

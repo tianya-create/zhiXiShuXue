@@ -3,6 +3,7 @@ const { gradeAnswer } = require("./autoGrade");
 const { updateMastery } = require("./masteryEngine");
 const { enrichQuestion } = require("./curriculum");
 const { canonicalKnowledgeId } = require("./question-map");
+const { finalizePendingLearningRound } = require("./adaptive-learning");
 function gradeQuestions(ids, answers, overrides = []) {
   return [...new Set(ids)].map((id) => {
     const question =
@@ -250,6 +251,7 @@ function reviewRecord(collection, record, body, teacherId) {
       corrections: body.corrections || {},
     });
     synchronize(updated);
+    finalizePendingLearningRound(updated);
     db.addLog(teacherId, "REVIEW_SUBMISSION", {
       recordId: record.id,
       collection,

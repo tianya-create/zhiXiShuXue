@@ -131,12 +131,23 @@
                 label="提高"
                 value="hard" /></el-select
           ></el-form-item>
+          <el-form-item label="任务复杂度（认知适配）"
+            ><el-select v-model="form.taskComplexity"
+              ><el-option label="低：单一步骤、信息精简" value="low" /><el-option
+                label="中：常规综合程度"
+                value="medium" /><el-option
+                label="高：多步、变式或迁移"
+                value="high" /></el-select
+          ></el-form-item>
         </div>
         <el-form-item label="题干"
           ><el-input
             v-model="form.content"
             type="textarea"
             :rows="3" /><MathText :text="form.content"
+        /></el-form-item>
+        <el-form-item label="低信息密度题干（可选）"
+          ><el-input v-model="form.conciseStem" type="textarea" :rows="2" placeholder="仅精简表达，不改变知识目标和已知条件"
         /></el-form-item>
         <el-form-item v-if="form.type === 'choice'" label="选项（每行一个）"
           ><el-input v-model="optionsText" type="textarea" :rows="4"
@@ -155,6 +166,9 @@
         /></el-form-item>
         <el-form-item label="分步提示（每行一步，可选）"
           ><el-input v-model="hintsText" type="textarea" :rows="2"
+        /></el-form-item>
+        <el-form-item label="高支架拆解步骤（每行一步，可选）"
+          ><el-input v-model="scaffoldText" type="textarea" :rows="3" placeholder="识别已知量&#10;写出关系式&#10;代入并检验"
         /></el-form-item>
         <el-form-item label="总分"
           ><el-input-number v-model="form.score" :min="1" :max="100"
@@ -218,13 +232,17 @@ const form = reactive({}),
   optionsText = ref(""),
   acceptedText = ref(""),
   hintsText = ref(""),
+  scaffoldText = ref(""),
   rubricText = ref("");
 const lines = (text) =>
   text
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
-const canEdit = (row) => props.role === "admin" || row.createdBy === user.id;
+// 系统预置题不带 createdBy，允许本校教师完成补充与审核；
+// 其他教师录入的题目仍需由管理员处理，避免越权修改。
+const canEdit = (row) =>
+  props.role === "admin" || !row.createdBy || row.createdBy === user.id;
 const statusName = (status) =>
   status === "approved"
     ? "已审核"
@@ -264,6 +282,8 @@ function edit(row) {
           answer: "",
           analysis: "",
           difficulty: "easy",
+          taskComplexity: "low",
+          conciseStem: "",
           score: 5,
           reviewStatus: "pending",
           textbookVersion: "通用（教师确认）",
@@ -273,6 +293,7 @@ function edit(row) {
   optionsText.value = (row?.options || []).join("\n");
   acceptedText.value = (row?.acceptedAnswers || []).join("\n");
   hintsText.value = (row?.hints || []).join("\n");
+  scaffoldText.value = (row?.scaffoldSteps || []).join("\n");
   rubricText.value = (row?.rubric || [])
     .map((step) => step.points + "|" + step.description)
     .join("\n");
@@ -301,6 +322,7 @@ async function save() {
       options: form.type === "choice" ? lines(optionsText.value) : [],
       acceptedAnswers: lines(acceptedText.value),
       hints: lines(hintsText.value),
+      scaffoldSteps: lines(scaffoldText.value),
       rubric:
         form.type === "subjective"
           ? lines(rubricText.value).map((line) => {

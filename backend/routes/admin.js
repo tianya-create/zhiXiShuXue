@@ -53,7 +53,36 @@ router.get('/settings', (req, res) => {
 router.put('/settings', (req, res) => {
   try {
     const userId = req.headers['x-user-id'];
-    const updates = req.body;
+    const updates = { ...req.body };
+    if (updates.adaptiveLearning) {
+      const current = require('../services/adaptive-learning').getConfig();
+      const input = updates.adaptiveLearning;
+      const adaptiveLearning = {
+        ...current,
+        enabled: input.enabled === undefined ? current.enabled : Boolean(input.enabled),
+        controlLowMax: Number(input.controlLowMax),
+        controlHighMin: Number(input.controlHighMin),
+        highEffortMin: Number(input.highEffortMin),
+        accuracyLowMax: Number(input.accuracyLowMax),
+        accuracyHighMin: Number(input.accuracyHighMin),
+        ruleVersion: String(input.ruleVersion || current.ruleVersion).trim().slice(0, 60),
+        enabledKnowledgePointIds: current.enabledKnowledgePointIds
+      };
+      if (
+        !Number.isFinite(adaptiveLearning.controlLowMax) || adaptiveLearning.controlLowMax < 1 ||
+        !Number.isFinite(adaptiveLearning.controlHighMin) || adaptiveLearning.controlHighMin > 5 ||
+        adaptiveLearning.controlLowMax >= adaptiveLearning.controlHighMin
+      ) throw new Error('控制感阈值必须在 1—5 之间，且低阈值小于高阈值');
+      if (!Number.isFinite(adaptiveLearning.highEffortMin) || adaptiveLearning.highEffortMin < 1 || adaptiveLearning.highEffortMin > 5)
+        throw new Error('高心理努力阈值应为 1—5');
+      if (
+        !Number.isFinite(adaptiveLearning.accuracyLowMax) || adaptiveLearning.accuracyLowMax < 0 ||
+        !Number.isFinite(adaptiveLearning.accuracyHighMin) || adaptiveLearning.accuracyHighMin > 1 ||
+        adaptiveLearning.accuracyLowMax >= adaptiveLearning.accuracyHighMin
+      ) throw new Error('正确率阈值必须在 0—1 之间，且低阈值小于高阈值');
+      if (!adaptiveLearning.ruleVersion) throw new Error('规则版本不能为空');
+      updates.adaptiveLearning = adaptiveLearning;
+    }
     
     db.data.settings = {
       ...db.data.settings,

@@ -102,6 +102,13 @@ function allowedRecord(collection, item, actor = scope.getStore()) {
         "studentQuestionAttempts",
         "masteredWrongQuestions",
         "questionReports",
+        "learningRounds",
+        "controlAssessments",
+        "adaptationDecisions",
+        "learnerPresentationProfiles",
+        "presentationLearningEvidence",
+        "presentationAdjustmentEvents",
+        "teacherSupportRequests",
       ].includes(collection) ||
       collection.startsWith("student_mistake_")
     )
@@ -150,6 +157,13 @@ function allowedRecord(collection, item, actor = scope.getStore()) {
         "drafts",
         "masteredWrongQuestions",
         "recommendationLogs",
+        "learningRounds",
+        "controlAssessments",
+        "adaptationDecisions",
+        "learnerPresentationProfiles",
+        "presentationLearningEvidence",
+        "presentationAdjustmentEvents",
+        "teacherSupportRequests",
       ].includes(collection) ||
       collection.startsWith("student_mistake_")
     )
@@ -206,10 +220,16 @@ function teacherGuard(req, res, next) {
   ) {
     const item = db.data[collection]?.find((x) => x.id === parts[1]);
     const editQuestion = collection === "questions" && req.method !== "GET";
+    // 系统预置题没有 createdBy。教师可补全、审核这类题，
+    // 但仍不能修改其他教师录入的题目。
+    const editSystemQuestion =
+      collection === "questions" &&
+      !item?.createdBy &&
+      (req.method === "PUT" || parts[2] === "review");
     if (
       item &&
       (!allowedRecord(collection, item, req.user) ||
-        (editQuestion && item.createdBy !== req.user.id))
+        (editQuestion && item.createdBy !== req.user.id && !editSystemQuestion))
     )
       return res
         .status(403)

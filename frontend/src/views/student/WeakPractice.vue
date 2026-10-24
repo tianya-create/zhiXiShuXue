@@ -1,5 +1,5 @@
 <template>
-  <div class="weak-practice-page">
+  <div :class="['weak-practice-page', `density-${activeDecision?.pageDensity || 'standard'}`]">
     <header class="page-header">
       <div class="header-content">
         <div class="header-text">
@@ -8,6 +8,14 @@
         </div>
         <el-button v-if="!planIds.length" type="primary" :loading="loading" @click="loadRecommendations(true)">换一批</el-button>
       </div>
+      <div v-if="activeDecision" class="adaptation-banner">
+        <span class="adaptation-icon">{{ activeDecision.guidance?.emoji || '🧭' }}</span>
+        <div>
+          <b>本轮学习安排</b>
+          <p>{{ activeDecision.strategy }}</p>
+        </div>
+        <el-tag effect="plain">{{ complexityLabel(activeDecision.targetComplexity) }}</el-tag>
+      </div>
       <div v-if="planIds.length" class="plan-progress">
         <span class="plan-label">补练计划</span>
         <el-steps :active="planIndex" finish-status="success" simple class="plan-steps">
@@ -15,6 +23,8 @@
         </el-steps>
       </div>
     </header>
+
+    <AdaptiveResourcePanel :mode="presentationMode.primary" :secondary-mode="presentationMode.secondary" />
 
     <el-empty v-if="!loading && !questions.length" :description="emptyReason" />
 
@@ -59,6 +69,12 @@
         <el-button type="primary" @click="confirmNextBatch">{{ nextButtonText }}</el-button>
       </template>
     </el-dialog>
+
+    <AdaptiveReflectionDialog
+      v-model="reflectionVisible"
+      :round="pendingRound"
+      @completed="handleReflectionCompleted"
+    />
   </div>
 </template>
 
@@ -69,6 +85,8 @@ import { ElMessage } from 'element-plus'
 import api from '@/utils/api'
 import { useAnswerDraft } from '@/composables/useAnswerDraft'
 import QuestionCard from '@/components/QuestionCard.vue'
+import AdaptiveReflectionDialog from '@/components/adaptive/AdaptiveReflectionDialog.vue'
+import AdaptiveResourcePanel from '@/components/adaptive/AdaptiveResourcePanel.vue'
 import { KNOWLEDGE_TREE_SHARED_CONFIG } from '@/utils/knowledge-meta'
 
 const route = useRoute()
@@ -89,6 +107,10 @@ const nextButtonText = computed(() => {
 const loading = ref(false)
 const submitting = ref(false)
 const batchDialogVisible = ref(false)
+const reflectionVisible = ref(false)
+const pendingRound = ref(null)
+const activeDecision = ref(null)
+const presentationMode = reactive({ primary: 'readWrite', secondary: null, mixed: false })
 const emptyReason = ref('当前没有可用题目，请先完成班级已学范围设置。')
 const questions = ref([])
 const answers = ref({})
@@ -103,6 +125,10 @@ const KP_NAME = KNOWLEDGE_TREE_SHARED_CONFIG.categories.reduce((acc, category) =
 }, {})
 const practiceMeta = reactive({ knowledgePointId: '', mode: 'weak-point', title: '薄弱补练' })
 const batchSummary = reactive({ accuracy: 0, total: 0, knowledgePoints: [] })
+
+function complexityLabel(value) {
+  return ({ low: '低复杂度 · 分步练习', medium: '标准复杂度', high: '进阶变式挑战' })[value] || '标准复杂度'
+}
 
 const pageTitle = computed(() => practiceMeta.title || '薄弱补练')
 const pageDesc = computed(() => practiceMeta.mode === 'wrong-question'
@@ -152,6 +178,9 @@ async function loadRecommendations(refresh) {
         draft.restore(saved)
         if (data.title) practiceMeta.title = data.title
         if (data.mode) practiceMeta.mode = data.mode
+        activeDecision.value = data.adaptation || null
+        Object.assign(presentationMode, data.presentationMode || {})
+        emptyReason.value = data.emptyReason || '当前没有可用题目，请选择已学知识点或联系老师补充审核题目。'
         if (!questions.value.length && practiceMeta.knowledgePointId) {
           return api.student.getPracticeQuestions(practiceMeta.knowledgePointId).then(fallback => {
             if (fallback.success) questions.value = fallback.data || []
@@ -213,12 +242,26 @@ function submitBatch() {
         label: `答对 ${item.correctCount}/${item.questionCount}` + (item.masteryAfter !== undefined && item.masteryAfter !== null ? `，掌握度 ${Math.round(item.masteryAfter)}%` : ''),
         type: item.masteryAfter >= 80 ? 'success' : item.masteryAfter >= 60 ? 'warning' : 'danger'
       }))
-      batchDialogVisible.value = true
+      pendingRound.value = data.learningRound || null
+      if (pendingRound.value?.reflectionRequired) reflectionVisible.value = true
+      else batchDialogVisible.value = true
     }
   }).catch(() => {
     ElMessage.error('提交失败')
   }).finally(() => {
     submitting.value = false
+  })
+}
+
+function handleReflectionCompleted() {
+  if (!pendingRound.value?.id) {
+    batchDialogVisible.value = true
+    return
+  }
+  router.replace({
+    name: 'StudentAdaptiveFeedback',
+    params: { roundId: pendingRound.value.id },
+    query: { source: 'practice', ...route.query }
   })
 }
 
@@ -240,7 +283,16 @@ watch(() => route.query.kpId, (value, oldValue) => {
   if (value !== oldValue && route.path === '/student/practice') loadRecommendations(false)
 })
 
-onMounted(() => loadRecommendations(false))
+onMounted(() => {
+  api.get('/student/adaptation/status').then(res => {
+    if (!res.success) return
+    Object.assign(presentationMode, res.data.presentationMode || {})
+    if (res.data.pendingRound?.reflectionRequired) {
+      pendingRound.value = res.data.pendingRound
+      reflectionVisible.value = true
+    }
+  }).catch(() => {}).finally(() => loadRecommendations(false))
+})
 </script>
 
 <style scoped>
@@ -250,9 +302,14 @@ onMounted(() => loadRecommendations(false))
 .plan-progress { margin-top: 18px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .plan-label { font-weight: 700; color: var(--nb-ink); white-space: nowrap; }
 .plan-steps { flex: 1; min-width: 260px; background: var(--nb-sheet) !important; border: 1px solid var(--nb-line); border-radius: 10px; }
+.adaptation-banner { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 12px 14px; border: 1px solid var(--nb-blue); border-radius: 12px; background: var(--nb-blue-soft); color: var(--nb-ink); }
+.adaptation-banner div { flex: 1; min-width: 0; }.adaptation-banner p { margin: 3px 0 0; color: var(--nb-ink-2); font-size: 14px; line-height: 1.5; }.adaptation-icon { font-size: 27px; }
 
 .practice-list { max-width: 880px; }
 .practice-item { margin-bottom: 8px; }
+.density-low .practice-list { max-width: 760px; }
+.density-low .practice-item { margin-bottom: 24px; }
+.density-low .reason { max-width: 62ch; margin-bottom: 14px; }
 .reason { margin: 0 0 8px; display: flex; gap: 8px; align-items: baseline; color: var(--nb-ink-2); font-size: 14px; line-height: 1.6; }
 .reason-label { flex-shrink: 0; padding: 0 6px; border-radius: 4px; background: var(--nb-blue-soft); color: var(--nb-blue); font-weight: 700; font-size: 14px; }
 

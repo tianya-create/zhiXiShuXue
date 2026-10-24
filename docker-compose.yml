@@ -12,6 +12,7 @@ services:
     environment:
       - NODE_ENV=production
       - API_PORT=5001
+      - DATA_DIR=/app/database
       - TZ=Asia/Shanghai
     volumes:
       # SQLite 数据库持久化
