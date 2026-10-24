@@ -18,6 +18,8 @@
         <span class="route-node route-node--middle"></span>
         <span class="route-node route-node--current"></span>
         <span class="route-node route-node--goal"></span>
+        <span class="route-label route-label--one"></span>
+        <span class="route-label route-label--two"></span>
       </div>
     </section>
 
@@ -146,19 +148,22 @@ function handleLogin() {
 }
 
 .intro-card { min-height: 430px; padding: clamp(48px, 6vh, 72px) clamp(46px, 5.4vw, 82px); overflow: hidden; }
-.intro-tag { display: inline-block; margin: 0 0 24px; padding: 8px 16px; border-radius: 12px; color: var(--blue); background: #e8eeff; font-size: 18px; font-weight: 800; }
-.intro-card h1 { margin: 0; color: #10225b; font-family: 'ZCOOL QingKe HuangYou', 'Microsoft YaHei', sans-serif; font-size: clamp(62px, 6.1vw, 92px); font-weight: 400; line-height: .98; letter-spacing: .04em; }
-.mechanism { display: inline-block; margin: 36px 0 0; padding-bottom: 11px; position: relative; color: #23376e; font-size: clamp(19px, 1.65vw, 27px); font-weight: 800; letter-spacing: .08em; }
+.intro-tag { display: inline-block; margin: 0 0 24px; padding: 8px 16px; position: relative; z-index: 1; border-radius: 12px; color: var(--blue); background: #e8eeff; font-size: 18px; font-weight: 800; }
+.intro-card h1 { margin: 0; position: relative; z-index: 1; color: #10225b; font-family: 'ZCOOL QingKe HuangYou', 'Microsoft YaHei', sans-serif; font-size: clamp(62px, 6.1vw, 92px); font-weight: 400; line-height: .98; letter-spacing: .04em; }
+.mechanism { display: inline-block; margin: 36px 0 0; padding-bottom: 11px; position: relative; z-index: 1; color: #23376e; font-size: clamp(19px, 1.65vw, 27px); font-weight: 800; letter-spacing: .08em; }
 .mechanism::after { position: absolute; right: -7px; bottom: 0; left: -4px; height: 7px; border-radius: 50%; content: ''; background: #ffd43b; transform: rotate(-1deg); }
 .mechanism i { color: #345ff1; font-style: normal; }
 
-.learning-route { position: absolute; right: 30px; bottom: 26px; width: min(37%, 240px); height: 112px; }
+.learning-route { position: absolute; z-index: 0; right: 24px; bottom: 20px; left: 56%; height: 140px; pointer-events: none; }
 .route-line { position: absolute; right: 25px; bottom: 22px; left: 10px; height: 72px; border-bottom: 3px solid #94aeff; border-radius: 0 0 85% 0; transform: skewY(-18deg); }
 .route-node { position: absolute; display: block; border-radius: 50%; background: #3567f4; box-shadow: 0 0 0 8px rgba(53, 103, 244, .09); }
 .route-node--start { bottom: 16px; left: 5px; width: 14px; height: 14px; background: #a6bcff; box-shadow: none; }
 .route-node--middle { bottom: 51px; left: 39%; width: 18px; height: 18px; }
 .route-node--current { right: 31%; bottom: 74px; width: 21px; height: 21px; border: 3px solid #2a55f5; background: #eff3ff; }
 .route-node--goal { right: 1px; bottom: 103px; width: 31px; height: 31px; box-shadow: 0 0 0 12px rgba(53, 103, 244, .12); }
+.route-label { position: absolute; display: block; height: 18px; border-radius: 4px; background: #eaf0ff; }
+.route-label--one { bottom: 0; left: 23%; width: 53px; }
+.route-label--two { bottom: 115px; left: 59%; width: 70px; }
 
 .login-card { width: min(100%, 438px); justify-self: end; padding: clamp(53px, 6.4vh, 76px) clamp(36px, 4.5vw, 58px) clamp(46px, 5.4vh, 63px); }
 .login-heading { display: flex; align-items: center; gap: 20px; margin-bottom: 48px; }
@@ -193,7 +198,7 @@ function handleLogin() {
   .intro-tag { margin-bottom: 18px; padding: 6px 12px; font-size: 14px; }
   .intro-card h1 { font-size: clamp(49px, 15vw, 68px); }
   .mechanism { margin-top: 25px; font-size: 15px; }
-  .learning-route { right: 20px; bottom: 24px; width: 38%; transform: scale(.78); transform-origin: bottom right; }
+  .learning-route { right: 14px; bottom: 18px; left: 54%; transform: scale(.78); transform-origin: bottom right; }
   .login-card { box-sizing: border-box; width: 100%; padding: 42px 28px; }
   .login-heading { gap: 14px; margin-bottom: 35px; }
   .login-heading > span { width: 5px; height: 62px; }
