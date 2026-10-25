@@ -54,6 +54,28 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <el-card class="gradient-card adaptation-card">
+      <template #header>认知—心理双维度统计</template>
+      <el-row :gutter="18">
+        <el-col :xs="24" :md="8">
+          <h3>学业控制感分布</h3>
+          <div class="distribution-row"><span>低</span><b>{{ adaptation.controlDistribution.low }}</b></div>
+          <div class="distribution-row"><span>中</span><b>{{ adaptation.controlDistribution.medium }}</b></div>
+          <div class="distribution-row"><span>高</span><b>{{ adaptation.controlDistribution.high }}</b></div>
+        </el-col>
+        <el-col :xs="24" :md="8">
+          <h3>习题认知负荷分布</h3>
+          <div class="distribution-row"><span>低</span><b>{{ adaptation.taskComplexityDistribution.low }}</b></div>
+          <div class="distribution-row"><span>中</span><b>{{ adaptation.taskComplexityDistribution.medium }}</b></div>
+          <div class="distribution-row"><span>高</span><b>{{ adaptation.taskComplexityDistribution.high }}</b></div>
+        </el-col>
+        <el-col :xs="24" :md="8">
+          <h3>VARK 学习偏好分布</h3>
+          <div v-for="key in ['V','A','R','K']" :key="key" class="distribution-row"><span>{{ preferenceName(key) }}</span><b>{{ adaptation.preferenceDistribution[key] }}</b></div>
+        </el-col>
+      </el-row>
+    </el-card>
   </div>
 </template>
 
@@ -80,6 +102,11 @@ var stats = reactive({
   questionCount: 0,
   answerCount: 0
 })
+var adaptation = reactive({
+  controlDistribution: { low: 0, medium: 0, high: 0 },
+  taskComplexityDistribution: { low: 0, medium: 0, high: 0 },
+  preferenceDistribution: { V: 0, A: 0, R: 0, K: 0 }
+})
 
 onMounted(function() {
   loadStats()
@@ -101,6 +128,13 @@ function loadStats() {
     .catch(function(error) {
       console.error('加载统计失败:', error)
     })
+  api.get('/admin/adaptation/overview').then(function(res) {
+    if (res.success) Object.assign(adaptation, res.data)
+  }).catch(function() {})
+}
+
+function preferenceName(key) {
+  return ({ V: '视觉 V', A: '听觉 A', R: '阅读书写 R', K: '动觉实操 K' })[key]
 }
 
 function exportData(type) {
@@ -212,4 +246,8 @@ function restoreData(file) {
   display: flex;
   gap: 12px;
 }
+.adaptation-card { margin-top: 20px; }
+.adaptation-card h3 { margin: 0 0 10px; font-size: 16px; }
+.distribution-row { display: flex; justify-content: space-between; padding: 8px 10px; margin-bottom: 6px; border-radius: 8px; background: var(--nb-blue-soft); color: var(--nb-ink-2); }
+.distribution-row b { color: var(--nb-blue); }
 </style>

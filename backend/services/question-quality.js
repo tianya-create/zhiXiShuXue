@@ -32,15 +32,17 @@ function normalizeQuestion(input, existing = {}, actor) {
   question.difficulty = ["easy", "medium", "hard"].includes(question.difficulty)
     ? question.difficulty
     : "medium";
-  question.taskComplexity = ["low", "medium", "high"].includes(
-    question.taskComplexity,
+  const cognitiveLoadLevel = question.cognitiveLoadLevel || question.taskComplexity;
+  question.cognitiveLoadLevel = ["low", "medium", "high"].includes(
+    cognitiveLoadLevel,
   )
-    ? question.taskComplexity
+    ? cognitiveLoadLevel
     : question.difficulty === "easy"
       ? "low"
       : question.difficulty === "hard"
         ? "high"
         : "medium";
+  question.taskComplexity = question.cognitiveLoadLevel;
   question.scaffoldSteps = Array.isArray(question.scaffoldSteps)
     ? question.scaffoldSteps.map((item) => String(item).trim()).filter(Boolean).slice(0, 8)
     : [];

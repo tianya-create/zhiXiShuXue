@@ -1,5 +1,5 @@
 <template>
-  <article :class="['nb-question', result && !result.needsReview ? (result.isCorrect ? 'is-right' : 'is-wrong') : '']">
+  <article :class="['nb-question', `presentation-${presentationMode}`, result && !result.needsReview ? (result.isCorrect ? 'is-right' : 'is-wrong') : '']">
     <!-- 红笔批改记号：提交后出现 -->
     <svg v-if="result && !result.needsReview" class="pen-mark" viewBox="0 0 120 100" aria-hidden="true">
       <path
@@ -24,7 +24,7 @@
     <img v-if="question.imageUrl" :src="question.imageUrl" alt="题目附图" style="max-width:100%;max-height:300px" />
     <QuestionTools :question="question" :answered="!!result" />
 
-    <details v-if="!result && question.adaptiveScaffoldSteps?.length" class="q-scaffold">
+    <details v-if="!result && question.adaptiveScaffoldSteps?.length" class="q-scaffold" :open="autoExpandScaffold">
       <summary>需要时展开分步提示</summary>
       <ol><li v-for="step in question.adaptiveScaffoldSteps" :key="step"><MathText :text="step" /></li></ol>
     </details>
@@ -107,7 +107,9 @@ const props = defineProps({
   question: { type: Object, required: true },
   index: { type: Number, default: 0 },
   modelValue: { type: String, default: '' },
-  result: { type: Object, default: null }
+  result: { type: Object, default: null },
+  presentationMode: { type: String, default: 'readWrite' },
+  autoExpandScaffold: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -206,6 +208,16 @@ function isAnswerOption(option, idx) {
 }
 .q-scaffold { margin-top: 12px; padding: 10px 13px; border: 1px dashed var(--nb-blue); border-radius: 9px; background: var(--nb-blue-soft); color: var(--nb-ink-2); }
 .q-scaffold summary { color: var(--nb-blue); font-weight: 700; cursor: pointer; }.q-scaffold ol { margin: 10px 0 0; padding-left: 24px; }.q-scaffold li { margin: 6px 0; line-height: 1.55; }
+
+/* 第二层资源呈现：不改变题目难度，只改变进入和理解题目的支架形式。 */
+.presentation-visual .q-stem { padding: 10px 12px; border-left: 4px solid #557ad7; border-radius: 0 9px 9px 0; background: #f3f6ff; }
+.presentation-visual .q-options { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.presentation-readWrite .q-stem { max-width: 64ch; padding-bottom: 10px; border-bottom: 1px solid var(--nb-line); font-size: 17px; line-height: 1.95; }
+.presentation-readWrite .q-meta { border-radius: 3px; background: #e9f7f2; color: #387e72; }
+.presentation-aural .q-head { padding-bottom: 8px; border-bottom: 2px solid #c9afe8; }
+.presentation-aural .q-meta { background: #f5edff; color: #7749ae; }
+.presentation-kinesthetic .q-head { padding-bottom: 8px; border-bottom: 2px solid #f0c78e; }
+.presentation-kinesthetic .q-stem { margin-top: 14px; font-size: 18px; font-weight: 650; }
 
 /* ---------- 选项 ---------- */
 .q-options {

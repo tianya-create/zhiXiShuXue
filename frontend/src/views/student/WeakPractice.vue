@@ -1,12 +1,12 @@
 <template>
-  <div :class="['weak-practice-page', `density-${activeDecision?.pageDensity || 'standard'}`]">
+  <div :class="['weak-practice-page', `density-${activeDecision?.pageDensity || 'standard'}`, `preference-${adaptationEnabled ? presentationMode.primary : 'standard'}`, { 'has-secondary-preference': adaptationEnabled && presentationMode.secondary }]">
     <header class="page-header">
       <div class="header-content">
         <div class="header-text">
           <h2>{{ pageTitle }}</h2>
           <p>{{ pageDesc }}</p>
         </div>
-        <el-button v-if="!planIds.length" type="primary" :loading="loading" @click="loadRecommendations(true)">换一批</el-button>
+        <el-button v-if="!planIds.length && practiceMeta.mode !== 'wrong-question'" type="primary" :loading="loading" @click="restartPracticeRound">换一批</el-button>
       </div>
       <div v-if="activeDecision" class="adaptation-banner">
         <span class="adaptation-icon">{{ activeDecision.guidance?.emoji || '🧭' }}</span>
@@ -24,11 +24,21 @@
       </div>
     </header>
 
-    <AdaptiveResourcePanel :mode="presentationMode.primary" :secondary-mode="presentationMode.secondary" />
+    <section v-if="!practiceReady && !loading" class="practice-gate">
+      <span>🧭</span>
+      <div><b>先完成本轮学习偏好问卷</b><p>问卷完成后会先展示你的本轮资源呈现偏好，再开始薄弱补练。</p></div>
+    </section>
 
-    <el-empty v-if="!loading && !questions.length" :description="emptyReason" />
+    <AdaptiveResourcePanel
+      v-if="practiceReady && adaptationEnabled"
+      :mode="presentationMode.primary"
+      :secondary-mode="presentationMode.secondary"
+      :knowledge-point-name="KP_NAME[practiceMeta.knowledgePointId] || '当前知识点'"
+    />
 
-    <div v-else v-loading="loading" class="practice-list">
+    <el-empty v-if="practiceReady && !loading && !questions.length" :description="emptyReason" />
+
+    <div v-else-if="practiceReady" v-loading="loading" class="practice-list">
       <div v-for="(item, index) in questions" :key="item.id" class="practice-item">
         <p class="reason"><span class="reason-label">为什么推荐</span>{{ reasonText(item) }}</p>
         <QuestionCard
@@ -36,11 +46,13 @@
           :index="index"
           v-model="answers[item.id]"
           :result="results[item.id]"
+          :presentation-mode="adaptationEnabled ? presentationMode.primary : 'standard'"
+          :auto-expand-scaffold="adaptationEnabled && activeDecision?.scaffoldLevel === 'high'"
         />
       </div>
 
       <div class="submit-bar">
-        <span>{{ draft.status.value || '作答会自动保存' }}</span>
+        <span>{{ adaptationEnabled ? '本轮需一次完成，中途退出不会保存' : (draft.status.value || '作答会自动保存') }}</span>
         <span class="submit-progress">已答 <b class="nb-num">{{ answeredTotal }}</b> / <span class="nb-num">{{ questions.length }}</span> 题</span>
         <el-button v-if="!submitted" type="primary" size="large" :loading="submitting" @click="submitBatch">交卷批改</el-button>
         <el-button v-else type="primary" size="large" @click="confirmNextBatch">{{ nextButtonText }}</el-button>
@@ -75,6 +87,10 @@
       :round="pendingRound"
       @completed="handleReflectionCompleted"
     />
+    <PracticePreferenceDialog
+      v-model="preferenceDialogVisible"
+      @completed="startPracticeAfterPreference"
+    />
   </div>
 </template>
 
@@ -87,6 +103,7 @@ import { useAnswerDraft } from '@/composables/useAnswerDraft'
 import QuestionCard from '@/components/QuestionCard.vue'
 import AdaptiveReflectionDialog from '@/components/adaptive/AdaptiveReflectionDialog.vue'
 import AdaptiveResourcePanel from '@/components/adaptive/AdaptiveResourcePanel.vue'
+import PracticePreferenceDialog from '@/components/adaptive/PracticePreferenceDialog.vue'
 import { KNOWLEDGE_TREE_SHARED_CONFIG } from '@/utils/knowledge-meta'
 
 const route = useRoute()
@@ -108,9 +125,13 @@ const loading = ref(false)
 const submitting = ref(false)
 const batchDialogVisible = ref(false)
 const reflectionVisible = ref(false)
+const preferenceDialogVisible = ref(false)
+const practiceReady = ref(false)
 const pendingRound = ref(null)
 const activeDecision = ref(null)
+const adaptationEnabled = ref(false)
 const presentationMode = reactive({ primary: 'readWrite', secondary: null, mixed: false })
+const adaptationStatus = ref(null)
 const emptyReason = ref('当前没有可用题目，请先完成班级已学范围设置。')
 const questions = ref([])
 const answers = ref({})
@@ -123,8 +144,12 @@ const KP_NAME = KNOWLEDGE_TREE_SHARED_CONFIG.categories.reduce((acc, category) =
   category.nodes.forEach(node => { acc[node.id] = node.name })
   return acc
 }, {})
+const ADAPTIVE_KNOWLEDGE_POINT_IDS = new Set(['alg-1', 'alg-2', 'algebra-3', 'alg-3'])
 const practiceMeta = reactive({ knowledgePointId: '', mode: 'weak-point', title: '薄弱补练' })
 const batchSummary = reactive({ accuracy: 0, total: 0, knowledgePoints: [] })
+const isAdaptiveWeakPractice = () =>
+  !route.query.questionId && !route.query.questionIds && route.query.mode !== 'wrong-redo' &&
+  ADAPTIVE_KNOWLEDGE_POINT_IDS.has(String(route.query.kpId || ''))
 
 function complexityLabel(value) {
   return ({ low: '低复杂度 · 分步练习', medium: '标准复杂度', high: '进阶变式挑战' })[value] || '标准复杂度'
@@ -156,10 +181,69 @@ function resetAnswers() {
   Object.keys(results.value).forEach(key => delete results.value[key])
 }
 
+async function preparePracticeSession() {
+  const isWrongRedo = Boolean(route.query.questionId || route.query.questionIds || route.query.mode === 'wrong-redo')
+  if (isWrongRedo) {
+    practiceReady.value = true
+    loadRecommendations(false)
+    return
+  }
+  if (!route.query.kpId) {
+    loading.value = true
+    try {
+      const response = await api.student.getWeakPoints()
+      const target = (response.data || [])
+        .filter(item => item.eligible && item.masteryRate !== null && Number(item.masteryRate) < 80)
+        .sort((a, b) => Number(a.masteryRate) - Number(b.masteryRate))[0]
+      if (!target) {
+        emptyReason.value = '暂时没有需要薄弱补练的知识点。错题原题请前往错题本重做。'
+        practiceReady.value = true
+        return
+      }
+      await router.replace({ query: { ...route.query, kpId: target.id } })
+    } finally {
+      loading.value = false
+    }
+  }
+  if (!isAdaptiveWeakPractice()) {
+    practiceReady.value = true
+    loadRecommendations(false)
+    return
+  }
+  if (!adaptationStatus.value) {
+    const response = await api.get('/student/adaptation/status')
+    adaptationStatus.value = response.data || {}
+  }
+  if (adaptationStatus.value.varkDue) {
+    preferenceDialogVisible.value = true
+    return
+  }
+  Object.assign(presentationMode, adaptationStatus.value.presentationMode || { primary: 'readWrite', secondary: null, mixed: false })
+  practiceReady.value = true
+  loadRecommendations(false)
+}
+
+function startPracticeAfterPreference(result) {
+  preferenceDialogVisible.value = false
+  adaptationStatus.value = { ...(adaptationStatus.value || {}), varkDue: false, ...(result || {}) }
+  Object.assign(presentationMode, result?.presentationMode || { primary: 'readWrite', secondary: null, mixed: false })
+  practiceReady.value = true
+  loadRecommendations(false)
+}
+
+function restartPracticeRound() {
+  if (!ADAPTIVE_KNOWLEDGE_POINT_IDS.has(String(route.query.kpId || ''))) {
+    loadRecommendations(true)
+    return
+  }
+  loadRecommendations(true)
+}
+
 async function loadRecommendations(refresh) {
   draft.pause()
-  const saved = !refresh ? await draft.read() : null
-  if (refresh) await draft.clear()
+  const adaptiveSession = isAdaptiveWeakPractice()
+  const saved = !adaptiveSession && !refresh ? await draft.read() : null
+  if (refresh || adaptiveSession) await draft.clear()
   loading.value = true
   resetAnswers()
   practiceMeta.knowledgePointId = route.query.kpId || ''
@@ -170,22 +254,19 @@ async function loadRecommendations(refresh) {
     api.get(`/student/practice/${practiceMeta.knowledgePointId || 'custom'}`, {
       questionId: route.query.questionId,
       questionIds: route.query.questionIds || saved?.questionIds?.join(','),
-      mode: route.query.mode
+      mode: route.query.mode,
+      adaptive: adaptiveSession ? 'true' : undefined
     }).then(res => {
       if (res.success) {
         const data = res.data || {}
         questions.value = data.questions || []
-        draft.restore(saved)
+        if (!adaptiveSession) draft.restore(saved)
         if (data.title) practiceMeta.title = data.title
         if (data.mode) practiceMeta.mode = data.mode
         activeDecision.value = data.adaptation || null
-        Object.assign(presentationMode, data.presentationMode || {})
+        adaptationEnabled.value = Boolean(data.adaptationEnabled)
+        Object.assign(presentationMode, data.presentationMode || { primary: 'readWrite', secondary: null, mixed: false })
         emptyReason.value = data.emptyReason || '当前没有可用题目，请选择已学知识点或联系老师补充审核题目。'
-        if (!questions.value.length && practiceMeta.knowledgePointId) {
-          return api.student.getPracticeQuestions(practiceMeta.knowledgePointId).then(fallback => {
-            if (fallback.success) questions.value = fallback.data || []
-          })
-        }
       }
       return null
     }).finally(() => {
@@ -196,7 +277,7 @@ async function loadRecommendations(refresh) {
 
   api.student.getRecommendations({ limit: 3, refresh: refresh ? 'true' : 'false' })
     .then(res => {
-      if (res.success) { questions.value = res.data || []; draft.restore(saved); emptyReason.value = res.message || '当前没有可用题目，请选择已学知识点或联系老师补充审核题目。' }
+      if (res.success) { questions.value = res.data || []; if (!adaptiveSession) draft.restore(saved); adaptationEnabled.value = false; activeDecision.value = null; emptyReason.value = res.message || '当前没有可用题目，请选择已学知识点或联系老师补充审核题目。' }
     })
     .finally(() => {
       loading.value = false
@@ -219,6 +300,7 @@ function submitBatch() {
     questionIds: filledIds,
     mode: practiceMeta.mode,
     title: practiceMeta.title,
+    adaptive: adaptationEnabled.value,
     requestId: draft.requestId.value,
     costTime: Math.round((Date.now() - startedAt) / 1000)
   }).then(res => {
@@ -267,6 +349,10 @@ function handleReflectionCompleted() {
 
 function confirmNextBatch() {
   batchDialogVisible.value = false
+  if (practiceMeta.mode === 'wrong-question') {
+    router.push('/student/wrong-questions')
+    return
+  }
   if (hasNextInPlan.value) {
     router.replace({ query: { ...route.query, kpId: planIds.value[planIndex.value + 1] } })
     return
@@ -276,22 +362,26 @@ function confirmNextBatch() {
     router.push('/student/weak-points')
     return
   }
-  loadRecommendations(true)
+  restartPracticeRound()
 }
 
 watch(() => route.query.kpId, (value, oldValue) => {
-  if (value !== oldValue && route.path === '/student/practice') loadRecommendations(false)
+  if (value !== oldValue && route.path === '/student/practice' && practiceReady.value) {
+    practiceReady.value = false
+    preparePracticeSession()
+  }
 })
 
-onMounted(() => {
-  api.get('/student/adaptation/status').then(res => {
+onMounted(async () => {
+  await api.get('/student/adaptation/status').then(res => {
     if (!res.success) return
-    Object.assign(presentationMode, res.data.presentationMode || {})
+    adaptationStatus.value = res.data || {}
     if (res.data.pendingRound?.reflectionRequired) {
       pendingRound.value = res.data.pendingRound
       reflectionVisible.value = true
     }
-  }).catch(() => {}).finally(() => loadRecommendations(false))
+  }).catch(() => {})
+  await preparePracticeSession()
 })
 </script>
 
@@ -306,7 +396,19 @@ onMounted(() => {
 .adaptation-banner div { flex: 1; min-width: 0; }.adaptation-banner p { margin: 3px 0 0; color: var(--nb-ink-2); font-size: 14px; line-height: 1.5; }.adaptation-icon { font-size: 27px; }
 
 .practice-list { max-width: 880px; }
+.practice-gate { display: flex; align-items: center; gap: 13px; max-width: 760px; padding: 16px 18px; border: 1px solid var(--nb-line); border-radius: 14px; background: var(--nb-sheet); color: var(--nb-ink); }.practice-gate > span { display: grid; flex: 0 0 42px; height: 42px; place-items: center; border-radius: 12px; background: var(--nb-blue-soft); font-size: 23px; }.practice-gate b { font-size: 16px; }.practice-gate p { margin: 4px 0 0; color: var(--nb-ink-2); font-size: 14px; line-height: 1.5; }
 .practice-item { margin-bottom: 8px; }
+.preference-visual .practice-list { max-width: 960px; padding-left: 18px; border-left: 2px solid #cbd8ff; }
+.preference-visual .reason-label { background: #edf2ff; color: #557ad7; }
+.preference-readWrite .practice-list { max-width: 760px; }
+.preference-readWrite .reason { max-width: 66ch; line-height: 1.8; }
+.preference-readWrite .reason-label { background: #e9f7f2; color: #387e72; }
+.preference-aural .practice-list { max-width: 860px; }
+.preference-aural .reason-label { background: #f5edff; color: #8b5dc5; }
+.preference-kinesthetic .practice-list { max-width: 980px; }
+.preference-kinesthetic .practice-item { margin-bottom: 12px; }
+.preference-kinesthetic .reason { justify-content: space-between; padding: 6px 10px; border-radius: 8px; background: #fff7ea; }
+.preference-kinesthetic .reason-label { background: #fff0d6; color: #b56a2d; }
 .density-low .practice-list { max-width: 760px; }
 .density-low .practice-item { margin-bottom: 24px; }
 .density-low .reason { max-width: 62ch; margin-bottom: 14px; }
@@ -350,6 +452,7 @@ onMounted(() => {
 .batch-knowledge-item { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--nb-line); }
 
 @media (max-width: 640px) {
+  .preference-visual .practice-list { padding-left: 10px; }
   .submit-bar { bottom: 10px; padding: 10px 10px 10px 14px; }
 }
 </style>

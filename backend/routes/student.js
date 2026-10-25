@@ -14,12 +14,24 @@ const { expandKnowledgeIds, canonicalKnowledgeId } = require("../services/questi
 const {
   complexityOf,
   createLearningRound,
+  getConfig,
   isEnabledForKnowledgePoint,
+  isPresentationProfileDue,
   latestDecision,
   presentationMode,
   presentationProfile,
 } = require("../services/adaptive-learning");
 const router = express.Router();
+const studentDecision = (decision) => decision ? {
+  targetComplexity: decision.targetComplexity,
+  sourceComplexity: decision.sourceComplexity,
+  difficultyAdjustment: decision.difficultyAdjustment,
+  scaffoldLevel: decision.scaffoldLevel,
+  pageDensity: decision.pageDensity,
+  strategy: decision.strategy,
+  guidance: decision.guidance,
+  supportAvailable: decision.supportAvailable,
+} : null;
 const studentOf = (req) =>
   db.findById("students", req.user.id) ||
   db.findOne("students", { userId: req.user.id });
@@ -72,25 +84,39 @@ function assignmentQuestions(assignment) {
       .filter(Boolean)
   );
 }
-function practiceQuestions(student, kp) {
+function practiceQuestions(student, kp, adaptive = false) {
   if (!eligibleNodes(student.id).some((node) => node.id === kp)) return [];
-  const mistakes = db
+  // 薄弱补练与错题本分工：补练只取该薄弱知识点的非错题原题，
+  // 优先给学生从未做过的新题；错题原题只能从错题本进入重做。
+  const mistakenQuestionIds = new Set(db
     .getAllMistakesForStudent(student.id)
-    .filter((item) => !item.isResolved)
-    .map((item) => item.questionId);
-  const target = latestDecision(student.id, kp)?.targetComplexity;
+    .map((item) => item.questionId));
+  const attemptedQuestionIds = new Set(
+    db.find("studentQuestionAttempts", { studentId: student.id }).map((item) => item.questionId),
+  );
+  const target = adaptive && isEnabledForKnowledgePoint(kp)
+    ? latestDecision(student.id, kp)?.targetComplexity
+    : null;
   const complexityRank = { low: 0, medium: 1, high: 2 };
-  return getQuestionBankByNode({ knowledgePointId: kp })
+  const candidates = getQuestionBankByNode({ knowledgePointId: kp })
+    .filter((item) => !mistakenQuestionIds.has(item.id))
+    .filter((item) => !adaptive || !["subjective", "shortAnswer"].includes(item.type));
+  const unseen = candidates.filter((item) => !attemptedQuestionIds.has(item.id));
+  const pool = [
+    ...unseen,
+    ...candidates.filter((item) => attemptedQuestionIds.has(item.id)),
+  ];
+  return pool
     .sort(
       (a, b) =>
-        Number(mistakes.includes(b.id)) - Number(mistakes.includes(a.id)) ||
+        Number(attemptedQuestionIds.has(a.id)) - Number(attemptedQuestionIds.has(b.id)) ||
         (target
           ? Math.abs(complexityRank[complexityOf(a)] - complexityRank[target]) -
             Math.abs(complexityRank[complexityOf(b)] - complexityRank[target])
           : 0) ||
         a.difficultyLevel - b.difficultyLevel,
     )
-    .slice(0, 6);
+    .slice(0, adaptive && isEnabledForKnowledgePoint(kp) ? getConfig().roundSize : 6);
 }
 function weak(student) {
   const eligible = new Set(eligibleNodes(student.id).map((node) => node.id));
@@ -322,25 +348,13 @@ router.post(
       if (draft) db.deleteById("drafts", draft.id);
       return value;
     });
-    const adaptiveQuestions = questions.filter((item) =>
-      isEnabledForKnowledgePoint(item.knowledgePointId || item.knowledgePoints?.[0]),
-    );
-    const learningRound = adaptiveQuestions.length
-      ? createLearningRound({
-          student,
-          sourceType: "assignment",
-          sourceRecord: record,
-          questions: adaptiveQuestions,
-          knowledgePointId: adaptiveQuestions[0].knowledgePointId,
-        })
-      : null;
     res.json({
       success: true,
       data: {
         ...record,
         answerId: record.id,
         knowledgePointChanges: changes(student, questions),
-        learningRound,
+        learningRound: null,
       },
     });
   }),
@@ -417,7 +431,8 @@ router.get(
     const available = eligibleKpCodes(student.id);
     const nodeInClassScope = eligibleNodes(student.id).some((node) => node.id === kp);
     const approvedQuestionCount = getQuestionBankByNode({ knowledgePointId: kp }).length;
-    const questions = requested.length
+    const node = nodes.find((item) => item.id === kp);
+    let questions = requested.length
       ? requested
           .map((id) => db.findById("questions", id))
           .filter(
@@ -427,12 +442,22 @@ router.get(
               (available.has(item.knowledgePointId) ||
                 ownWrong.some((wrong) => wrong.questionId === item.id)),
           )
-      : practiceQuestions(student, kp);
-    const node = nodes.find((item) => item.id === kp);
-    const decision = latestDecision(student.id, kp);
+      : practiceQuestions(student, kp, req.query.adaptive === "true");
+    const adaptationEnabled = !requested.length && req.query.adaptive === "true" && isEnabledForKnowledgePoint(kp);
+    if (adaptationEnabled && isPresentationProfileDue(presentationProfile(student.id))) {
+      const error = new Error("请先完成本周学习偏好问卷，再开始薄弱练习");
+      error.status = 409;
+      throw error;
+    }
+    const incompleteAdaptivePack = adaptationEnabled && questions.length !== getConfig().roundSize;
+    if (incompleteAdaptivePack) questions = [];
+    const decision = adaptationEnabled ? latestDecision(student.id, kp) : null;
     const profile = presentationProfile(student.id);
     const presentedQuestions = questions.map((question) => {
       const safe = publicQuestion(question);
+      if (!requested.length) {
+        safe.recommendationReason = `针对你的薄弱知识点「${node?.name || kp}」安排的新题；错题原题保留在错题本中重做。`;
+      }
       if (decision?.pageDensity === "low" && question.conciseStem)
         safe.content = question.conciseStem;
       if (decision?.scaffoldLevel === "high")
@@ -452,8 +477,9 @@ router.get(
           ? "错题重做"
           : (node?.name || "知识点") + "专项练习",
         mode: requested.length ? "wrong-question" : "weak-point",
-        adaptation: decision,
-        presentationMode: presentationMode(profile),
+        adaptation: studentDecision(decision),
+        adaptationEnabled,
+        presentationMode: adaptationEnabled ? presentationMode(profile) : null,
         emptyReason:
           presentedQuestions.length
             ? ""
@@ -461,7 +487,9 @@ router.get(
               ? "这个知识点暂未纳入班级已学范围，请让老师在“班级管理 → 已学范围”中确认后再练习。"
               : !approvedQuestionCount
                 ? "这个知识点暂时没有审核通过的题目，请让老师在题库中补充或审核题目。"
-                : "当前没有符合练习条件的题目，请稍后再试。",
+              : incompleteAdaptivePack
+                ? `该知识点当前不足 ${getConfig().roundSize} 道可用新题，请联系教师补充题库后再练习。`
+                : "这个薄弱知识点暂时没有可用的新题；错题原题请到错题本中重做。",
       },
     });
   }),
@@ -486,6 +514,8 @@ router.post(
       ...new Set(req.body.questionIds || Object.keys(req.body.answers || {})),
     ];
     if (!ids.length || ids.length > 20) throw new Error("请选择 1 到 20 道题");
+    if (Object.keys(req.body.answers || {}).some((id) => !ids.includes(id)))
+      throw new Error("作答包含不属于本轮任务的题目");
     const eligible = eligibleKpCodes(student.id);
     const wrongIds = new Set(wrongs(student).map((item) => item.questionId));
     if (
@@ -499,7 +529,38 @@ router.post(
       })
     )
       throw new Error("题目未审核或不在已学范围");
+    const isWrongRedo = req.body.mode === "wrong-question";
+    if (!isWrongRedo && ids.some((id) => wrongIds.has(id)))
+      throw new Error("薄弱补练只推送新题；错题原题请从错题本进入重做");
     const questions = ids.map((id) => db.findById("questions", id));
+    const adaptivePractice = !isWrongRedo && req.body.adaptive === true && isEnabledForKnowledgePoint(req.params.knowledgePointId);
+    if (adaptivePractice) {
+      const config = getConfig();
+      if (isPresentationProfileDue(presentationProfile(student.id))) {
+        const error = new Error("学习偏好问卷已到复测时间，请完成问卷后再提交");
+        error.status = 409;
+        throw error;
+      }
+      if (ids.length !== config.roundSize) {
+        const error = new Error(`一轮练习必须答满 ${config.roundSize} 道题后统一提交`);
+        error.status = 422;
+        throw error;
+      }
+      const answerIds = Object.keys(req.body.answers || {});
+      if (ids.some((id) => !answerIds.includes(id) || !String(req.body.answers[id] || "").trim())) {
+        const error = new Error(`请完成本轮全部 ${config.roundSize} 道题后再提交`);
+        error.status = 422;
+        throw error;
+      }
+      const routeKp = canonicalKnowledgeId(req.params.knowledgePointId);
+      if (questions.some((question) => canonicalKnowledgeId(
+        question.knowledgePointId || question.knowledgePoints?.[0],
+      ) !== routeKp)) {
+        const error = new Error("一轮练习的题目必须属于同一知识点");
+        error.status = 422;
+        throw error;
+      }
+    }
     const before = changes(student, questions);
     const results = gradeQuestions(ids, req.body.answers || {});
     const record = db.transaction(() => {
@@ -543,13 +604,15 @@ router.post(
           : "本次练习已保存，请结合解析检查解题过程。",
       });
     });
-    const learningRound = createLearningRound({
-      student,
-      sourceType: "practice",
-      sourceRecord: record,
-      questions,
-      knowledgePointId: req.params.knowledgePointId,
-    });
+    const learningRound = isWrongRedo || !adaptivePractice
+      ? null
+      : createLearningRound({
+          student,
+          sourceType: "practice",
+          sourceRecord: record,
+          questions,
+          knowledgePointId: req.params.knowledgePointId,
+        });
     res.json({ success: true, data: { ...record, learningRound } });
   }),
 );

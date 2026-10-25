@@ -509,7 +509,33 @@ router.get('/papers', (req, res) => {
     if (classId) query.classId = classId;
     if (status) query.status = status;
 
-    const result = db.paginate('papers', query, parseInt(page), parseInt(pageSize));
+    const currentPage = Math.max(1, parseInt(page) || 1);
+    const currentPageSize = Math.max(1, parseInt(pageSize) || 10);
+    const papers = db.find('papers', query)
+      .filter(item => !item.archivedAt)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const decorate = paper => {
+      const assignments = db.find('assignments').filter(item => item.paperId === paper.id);
+      const assignmentIds = new Set(assignments.map(item => item.id));
+      const answerCount = db.find('answers').filter(item => assignmentIds.has(item.assignmentId)).length;
+      return {
+        ...paper,
+        questionCount: Array.isArray(paper.questions) ? paper.questions.length : 0,
+        assignmentCount: assignments.length,
+        answerCount,
+        removalMode: assignments.length
+          ? ((paper.source === 'question-bank' || paper.fileType === 'manual' || !paper.filePath) ? 'archive' : 'blocked')
+          : 'delete'
+      };
+    };
+    const start = (currentPage - 1) * currentPageSize;
+    const result = {
+      data: papers.slice(start, start + currentPageSize).map(decorate),
+      total: papers.length,
+      page: currentPage,
+      pageSize: currentPageSize,
+      totalPages: Math.ceil(papers.length / currentPageSize)
+    };
 
     res.json({ success: true, data: result });
   } catch (error) {
@@ -527,7 +553,22 @@ router.get('/papers/:id', (req, res) => {
       return res.status(404).json({ success: false, message: '试卷不存在' });
     }
 
-    res.json({ success: true, data: paper });
+    const assignments = db.find('assignments').filter(item => item.paperId === paper.id);
+    const assignmentIds = new Set(assignments.map(item => item.id));
+    const questionDetails = (paper.questions || [])
+      .map(questionId => db.findById('questions', questionId))
+      .filter(Boolean);
+    res.json({
+      success: true,
+      data: {
+        ...paper,
+        questionDetails,
+        usage: {
+          assignmentCount: assignments.length,
+          answerCount: db.find('answers').filter(item => assignmentIds.has(item.assignmentId)).length
+        }
+      }
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -543,7 +584,27 @@ router.delete('/papers/:id', (req, res) => {
       return res.status(404).json({ success: false, message: '试卷不存在' });
     }
 
-    if (db.find('assignments').some(item => item.paperId === paper.id)) return res.status(400).json({ success: false, message: '试卷已用于作业，请保留原卷供复核' });
+    const assignments = db.find('assignments').filter(item => item.paperId === paper.id);
+    if (assignments.length) {
+      const canArchive = paper.source === 'question-bank' || paper.fileType === 'manual' || !paper.filePath;
+      if (!canArchive) {
+        return res.status(400).json({
+          success: false,
+          message: `该试卷已用于 ${assignments.length} 份作业，需保留原文件供历史答卷复核；请先删除相关作业后再删除试卷`
+        });
+      }
+      const archived = db.updateById('papers', id, {
+        archivedAt: new Date().toISOString(),
+        archivedBy: req.user.id,
+        status: 'archived'
+      });
+      db.addLog(req.user.id, 'ARCHIVE_PAPER', { paperId: paper.id, title: paper.title, assignmentCount: assignments.length });
+      return res.json({
+        success: true,
+        data: archived,
+        message: '题集已从试卷列表移除，历史作业和答卷仍会保留'
+      });
+    }
     // 删除文件
     if (paper.filePath) {
       const filePath = require('../services/upload-path').resolveUpload(paper.filePath);
@@ -553,6 +614,8 @@ router.delete('/papers/:id', (req, res) => {
     }
 
     db.deleteById('papers', id);
+
+    db.addLog(req.user.id, 'DELETE_PAPER', { paperId: paper.id, title: paper.title });
 
     res.json({ success: true, message: '试卷删除成功' });
   } catch (error) {

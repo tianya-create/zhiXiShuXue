@@ -31,16 +31,16 @@
           </div>
           <small>已完成即时自评 {{ adaptive.assessedStudentCount }} / {{ adaptive.studentCount }} 人</small>
           <div class="complexity-tags">
-            <span>低复杂度 {{ adaptive.taskComplexityDistribution.low }}</span>
-            <span>标准 {{ adaptive.taskComplexityDistribution.medium }}</span>
-            <span>高复杂度 {{ adaptive.taskComplexityDistribution.high }}</span>
+            <span>低认知负荷 {{ adaptive.taskComplexityDistribution.low }}</span>
+            <span>中认知负荷 {{ adaptive.taskComplexityDistribution.medium }}</span>
+            <span>高认知负荷 {{ adaptive.taskComplexityDistribution.high }}</span>
           </div>
         </div>
         <div class="adaptive-card preference-card">
           <b>资源呈现偏好</b>
           <div class="preference-tags">
             <span>图形 V · {{ adaptive.preferenceDistribution.V }}</span>
-            <span>讲解 A · {{ adaptive.preferenceDistribution.A }}</span>
+            <span>听觉 A · {{ adaptive.preferenceDistribution.A }}</span>
             <span>文字 R · {{ adaptive.preferenceDistribution.R }}</span>
             <span>练习 K · {{ adaptive.preferenceDistribution.K }}</span>
           </div>

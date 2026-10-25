@@ -26,7 +26,7 @@ test("VARK 档案、长期学习证据和微调事件在重启后仍可读取", 
     });
     db.create('presentationLearningEvidence', {
       id: 'evidence-persist', studentId: 'student-persist', profileId: 'profile-persist',
-      roundId: 'round-persist', accuracy: 0.5, controlScore: 2, mentalEffort: 5
+      roundId: 'round-persist', accuracy: 0.5, controlScore: 2
     });
     db.create('presentationAdjustmentEvents', {
       id: 'event-persist', studentId: 'student-persist', profileId: 'profile-persist',

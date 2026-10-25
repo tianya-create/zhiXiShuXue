@@ -84,8 +84,9 @@
             {{ formatDate(scope.row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150">
+        <el-table-column label="操作" width="220">
           <template #default="scope">
+            <el-button v-if="scope.row.studentId" type="success" link @click="viewAdaptation(scope.row)">适配记录</el-button>
             <el-button type="primary" link @click="editUser(scope.row)">编辑</el-button>
             <el-button type="danger" link @click="deleteUser(scope.row)">删除</el-button>
           </template>
@@ -130,6 +131,23 @@
         <el-button type="primary" @click="submitForm">保存</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="adaptationVisible" :title="selectedStudentName + ' · 认知—心理适配记录'" width="min(860px,94vw)">
+      <div v-loading="adaptationLoading">
+        <div v-if="adaptationHistory.profile" class="adaptation-profile">
+          <b>当前 VARK 偏好：</b>
+          <el-tag v-for="item in adaptationHistory.profile.primaryDimensions" :key="item">{{ preferenceLabel(item) }}</el-tag>
+          <span>有效至 {{ formatDate(adaptationHistory.profile.validUntil) }}</span>
+        </div>
+        <el-empty v-if="!adaptationHistory.assessments.length" description="暂无轮后自评记录" :image-size="72" />
+        <el-table v-else :data="adaptationHistory.assessments" max-height="420">
+          <el-table-column label="时间" min-width="165"><template #default="scope">{{ formatDate(scope.row.createdAt) }}</template></el-table-column>
+          <el-table-column prop="knowledgePointId" label="知识点" min-width="120" />
+          <el-table-column label="控制感结果" width="115"><template #default="scope">{{ controlLabel(scope.row.controlLevel) }}（{{ scope.row.controlScore }}分）</template></el-table-column>
+          <el-table-column label="主观认知负荷" width="130"><template #default="scope">{{ loadLabel(scope.row.perceivedLoadLevel) }}（{{ scope.row.perceivedLoadScore || scope.row.answers?.cognitiveLoadItem || '-' }}分）</template></el-table-column>
+        </el-table>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -145,6 +163,10 @@ var importing = ref(false)
 var filterRole = ref('')
 var users = ref([])
 var dialogVisible = ref(false)
+var adaptationVisible = ref(false)
+var adaptationLoading = ref(false)
+var selectedStudentName = ref('')
+var adaptationHistory = ref({ assessments: [], decisions: [], profile: null, profiles: [] })
 var formRef = ref(null)
 var fileInputRef = ref(null)
 var selectedFile = ref(null)
@@ -176,6 +198,28 @@ function loadUsers() {
   .finally(function() {
     loading.value = false
   })
+}
+
+function viewAdaptation(user) {
+  selectedStudentName.value = user.name || user.username
+  adaptationVisible.value = true
+  adaptationLoading.value = true
+  api.get('/admin/adaptation/students/' + user.studentId + '/history')
+    .then(function(res) { if (res.success) adaptationHistory.value = res.data })
+    .catch(function(error) { ElMessage.error(error.response?.data?.message || '适配记录加载失败') })
+    .finally(function() { adaptationLoading.value = false })
+}
+
+function preferenceLabel(value) {
+  return ({ V: '视觉型 V', A: '听觉型 A', R: '阅读书写型 R', K: '动觉实操型 K' })[value] || value
+}
+
+function controlLabel(value) {
+  return ({ low: '低', medium: '中', high: '高' })[value] || '-'
+}
+
+function loadLabel(value) {
+  return ({ low: '低', medium: '中', high: '高' })[value] || '-'
 }
 
 function triggerSelectFile() {
@@ -350,4 +394,5 @@ function formatDate(date) {
   display: flex;
   gap: 12px;
 }
+.adaptation-profile { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; padding: 12px; border-radius: 10px; background: var(--nb-blue-soft); color: var(--nb-ink-2); }
 </style>

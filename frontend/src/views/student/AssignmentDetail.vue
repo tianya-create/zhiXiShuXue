@@ -188,6 +188,62 @@ function fillResults(questionList) {
   }
 }
 
+function answerCacheKey() {
+  var user = {}
+  try {
+    user = JSON.parse(localStorage.getItem('user') || '{}')
+  } catch (error) {
+    user = {}
+  }
+  return 'latest-answer-' + (user.id || 'unknown') + '-' + route.params.id
+}
+
+function cacheAnswerId(answerId) {
+  if (answerId) sessionStorage.setItem(answerCacheKey(), answerId)
+}
+
+function apiErrorMessage(error, fallback) {
+  var serverMessage = error?.response?.data?.message
+  if (serverMessage) return serverMessage
+  if (!navigator.onLine) return '网络已断开，草稿仍保存在本机，请联网后重试'
+  if (!error?.response) return '无法连接服务器，请确认后端服务已启动后重试'
+  return fallback
+}
+
+function openSubmittedAnswer(message) {
+  if (message) ElMessage.warning(message)
+  draft.clear().then(function() {
+    return router.replace({
+      path: '/student/assignment/' + route.params.id,
+      query: { view: 'result' }
+    })
+  }).then(function() {
+    loadResults()
+  })
+}
+
+function restoreDraftOrOpenResult() {
+  api.get('/student/assignments/' + route.params.id + '/latest-answer').then(function(res) {
+    var answerId = res?.data?.answerId
+    if (!answerId) {
+      draft.restore()
+      return
+    }
+    cacheAnswerId(answerId)
+    draft.pause()
+    ElMessage.info('这份作业已经交卷，已为你打开答卷')
+    router.replace({
+      path: '/student/assignment/' + route.params.id,
+      query: { view: 'result' }
+    }).then(function() {
+      loadResults()
+    })
+  }).catch(function() {
+    // 查询交卷状态失败时仍允许恢复本地草稿；真正交卷时会显示服务器的具体原因。
+    draft.restore()
+  })
+}
+
 function loadAssignment() {
   var assignmentId = route.params.id
   if (!assignmentId) return
@@ -199,10 +255,10 @@ function loadAssignment() {
       assignment.value = res.data.assignment
       paper.value = res.data.paper || null
       questions.value = res.data.questions || []
-      if (!viewMode.value) draft.restore()
-      
       if (viewMode.value) {
         loadResults()
+      } else {
+        restoreDraftOrOpenResult()
       }
     }
   }).catch(function() {
@@ -213,7 +269,7 @@ function loadAssignment() {
 }
 
 function loadResults() {
-  var cachedAnswerId = sessionStorage.getItem('latest-answer-' + JSON.parse(localStorage.getItem('user') || '{}').id + '-' + route.params.id)
+  var cachedAnswerId = sessionStorage.getItem(answerCacheKey())
   var request = cachedAnswerId
     ? Promise.resolve({ success: true, data: { answerId: cachedAnswerId } })
     : api.get('/student/assignments/' + route.params.id + '/latest-answer')
@@ -223,7 +279,7 @@ function loadResults() {
       throw new Error('no answer id')
     }
     var answerId = resultRes.data.answerId
-    sessionStorage.setItem('latest-answer-' + route.params.id, answerId)
+    cacheAnswerId(answerId)
     return api.get('/student/answers/' + answerId)
   }).then(function(res) {
     if (res.success) {
@@ -236,20 +292,14 @@ function loadResults() {
 }
 
 function submitAnswers() {
-  var answeredCount = 0
-  var answerKeys = Object.keys(answers)
-  for (var i = 0; i < answerKeys.length; i++) {
-    if (answers[answerKeys[i]]) {
-      answeredCount++
-    }
-  }
+  var completedCount = answeredCount.value
   
-  if (answeredCount === 0 && !images.value.length) {
+  if (completedCount === 0 && !images.value.length) {
     ElMessage.warning('一道题都还没做，先答几道再交卷')
     return
   }
   
-  ElMessageBox.confirm((questions.value.length ? '已答 ' + answeredCount + ' / ' + questions.value.length + ' 题' : '将提交 ' + images.value.length + ' 张作答图片') + '，交卷后就不能再改了。', '交卷', { confirmButtonText: '交卷', cancelButtonText: '再检查一下' }).then(function() {
+  ElMessageBox.confirm((questions.value.length ? '已答 ' + completedCount + ' / ' + questions.value.length + ' 题' : '将提交 ' + images.value.length + ' 张作答图片') + '，交卷后就不能再改了。', '交卷', { confirmButtonText: '交卷', cancelButtonText: '再检查一下' }).then(function() {
     submitting.value = true
     
     api.post('/student/assignments/' + route.params.id + '/submit', {
@@ -263,14 +313,19 @@ function submitAnswers() {
         ElMessage.success('已交卷')
         if (res.data && res.data.answerId) {
           submittedAnswerId.value = res.data.answerId
-          sessionStorage.setItem('latest-answer-' + route.params.id, res.data.answerId)
+          cacheAnswerId(res.data.answerId)
         }
         pendingRound.value = res.data?.learningRound || null
         if (pendingRound.value?.reflectionRequired) reflectionVisible.value = true
         else finishSubmission()
       }
-    }).catch(function() {
-      ElMessage.error('提交失败')
+    }).catch(function(error) {
+      var message = apiErrorMessage(error, '提交失败，请稍后重试')
+      if (error?.response?.status === 409 && message.includes('已交卷')) {
+        openSubmittedAnswer(message)
+        return
+      }
+      ElMessage.error(message)
     }).finally(function() {
       submitting.value = false
     })
@@ -278,8 +333,12 @@ function submitAnswers() {
 }
 
 function finishSubmission() {
-  router.replace('/student/assignment/' + route.params.id + '?view=result')
-  loadResults()
+  router.replace({
+    path: '/student/assignment/' + route.params.id,
+    query: { view: 'result' }
+  }).then(function() {
+    loadResults()
+  })
 }
 
 function handleReflectionCompleted() {

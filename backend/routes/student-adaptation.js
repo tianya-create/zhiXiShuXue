@@ -2,6 +2,8 @@ const express = require("express");
 const db = require("../database/memory-db");
 const {
   latestDecision,
+  getConfig,
+  isPresentationProfileDue,
   presentationMode,
   presentationProfile,
   questionnaire,
@@ -23,6 +25,24 @@ const run = (handler) => (req, res) => {
   }
 };
 
+const studentProfile = (profile) => profile ? {
+  primaryDimensions: profile.primaryDimensions,
+  mixed: profile.mixed,
+  completedAt: profile.completedAt,
+  validUntil: profile.validUntil,
+  calibration: profile.calibration,
+} : null;
+const studentDecision = (decision) => decision ? {
+  targetComplexity: decision.targetComplexity,
+  sourceComplexity: decision.sourceComplexity,
+  difficultyAdjustment: decision.difficultyAdjustment,
+  scaffoldLevel: decision.scaffoldLevel,
+  pageDensity: decision.pageDensity,
+  strategy: decision.strategy,
+  guidance: decision.guidance,
+  supportAvailable: decision.supportAvailable,
+} : null;
+
 router.get(
   "/adaptation/status",
   run((req, res, student) => {
@@ -34,8 +54,11 @@ router.get(
     res.json({
       success: true,
       data: {
-        questionnaireCompleted: Boolean(profile),
-        presentationProfile: profile,
+        questionnaireCompleted: Boolean(profile) && !isPresentationProfileDue(profile),
+        varkDue: isPresentationProfileDue(profile),
+        varkValidityDays: getConfig().varkValidityDays,
+        enabledKnowledgePointIds: getConfig().enabledKnowledgePointIds,
+        presentationProfile: studentProfile(profile),
         presentationMode: presentationMode(profile),
         pendingRound,
       },
@@ -53,7 +76,7 @@ router.post(
     const profile = savePresentationProfile(student.id, student.classId, req.body || {});
     res.json({
       success: true,
-      data: { profile, presentationMode: presentationMode(profile) },
+      data: { profile: studentProfile(profile), presentationMode: presentationMode(profile) },
       message: "学习资源呈现偏好已保存",
     });
   }),
@@ -71,7 +94,7 @@ router.get(
         items: [
           { id: "controlItem1", dimension: "control", text: "我有信心掌握刚才涉及的知识点。" },
           { id: "controlItem2", dimension: "control", text: "再遇到相似题，我有信心独立完成。" },
-          { id: "mentalEffort", dimension: "effort", text: "刚才这组题，我在理解上花了多大的脑力？" },
+          { id: "cognitiveLoadItem", dimension: "load", text: "完成这组题时，我需要同时处理的信息很多，感觉比较费力。" },
         ],
       },
     });
@@ -82,12 +105,18 @@ router.post(
   "/learning-rounds/:id/reflection",
   run((req, res, student) => {
     const data = submitReflection(student.id, req.params.id, req.body || {});
-    res.json({ success: true, data, message: "感受已记录，下一轮任务已调整" });
+    res.json({
+      success: true,
+      data: {
+        decision: studentDecision(data.decision),
+        presentationMode: presentationMode(data.presentationProfile || presentationProfile(student.id)),
+      },
+      message: "感受已记录，下一轮任务已调整",
+    });
   }),
 );
 
-// 反馈页需要把同一轮的作答表现、自评原始结果和适配决策一起读取。
-// 单独提供该接口，避免前端用“某知识点的最新决策”误配到其他轮次。
+// 学生反馈页只返回下一轮安排和鼓励，不暴露控制感分数、等级与原始答案。
 router.get(
   "/learning-rounds/:id/feedback",
   run((req, res, student) => {
@@ -100,11 +129,10 @@ router.get(
       success: true,
       data: {
         round,
-        assessment: assessment || null,
-        decision: decision || null,
+        decision: studentDecision(decision),
         feedbackReady: Boolean(assessment && decision),
         presentationMode: presentationMode(profile),
-        presentationProfile: profile,
+        presentationProfile: studentProfile(profile),
       },
     });
   }),
@@ -139,7 +167,7 @@ router.get(
     res.json({
       success: true,
       data: {
-        decision: latestDecision(student.id, req.params.knowledgePointId),
+        decision: studentDecision(latestDecision(student.id, req.params.knowledgePointId)),
         presentationMode: presentationMode(profile),
       },
     });

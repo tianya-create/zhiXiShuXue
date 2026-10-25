@@ -181,12 +181,16 @@ function initializeData() {
     logo: '/logo.png',
     adaptiveLearning: {
       enabled: true,
-      ruleVersion: 'adaptive-v1.0',
-      controlLowMax: 2.4,
-      controlHighMin: 3.8,
-      highEffortMin: 4,
+      ruleVersion: 'adaptive-v2.0',
+      roundSize: 5,
+      varkValidityDays: 7,
+      mixedPreferenceGapMax: 0.5,
+      controlLowMax: 4,
+      controlHighMin: 8,
+      perceivedLoadLowMax: 2,
+      perceivedLoadHighMin: 4,
       accuracyLowMax: 0.6,
-      accuracyHighMin: 0.85,
+      accuracyHighMin: 0.8,
       enabledKnowledgePointIds: ['alg-1', 'alg-2', 'algebra-3', 'alg-3']
     }
   }

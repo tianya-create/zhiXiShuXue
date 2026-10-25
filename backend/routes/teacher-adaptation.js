@@ -49,6 +49,9 @@ router.get(
           .find("adaptationDecisions", { studentId: student.id })
           .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
         profile: db.findOne("learnerPresentationProfiles", { studentId: student.id, active: true }),
+        profiles: db
+          .find("learnerPresentationProfiles", { studentId: student.id })
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
         presentationAdjustments: db
           .find("presentationAdjustmentEvents", { studentId: student.id })
           .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),

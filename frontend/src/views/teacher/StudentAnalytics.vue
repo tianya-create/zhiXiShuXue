@@ -53,8 +53,8 @@
         <el-table-column label="时间" min-width="150"><template #default="scope">{{ formatTime(scope.row.createdAt) }}</template></el-table-column>
         <el-table-column prop="knowledgePointId" label="知识点" min-width="130" />
         <el-table-column label="控制感" width="100"><template #default="scope"><el-tag :type="controlTag(scope.row.controlLevel)">{{ controlLabel(scope.row.controlLevel) }}</el-tag></template></el-table-column>
-        <el-table-column prop="controlScore" label="均分" width="75" />
-        <el-table-column prop="mentalEffort" label="心理努力" width="95" />
+        <el-table-column prop="controlScore" label="控制感总分" width="110" />
+        <el-table-column label="主观认知负荷" width="130"><template #default="scope">{{ loadLabel(scope.row.perceivedLoadLevel) }}（{{ scope.row.perceivedLoadScore || scope.row.answers?.cognitiveLoadItem || '-' }}分）</template></el-table-column>
       </el-table>
     </el-card>
     
@@ -248,7 +248,11 @@ function loadAnalytics() {
 }
 
 function preferenceLabel(value) {
-  return ({ V: '图示优先', A: '讲解示范优先', R: '规范文字优先', K: '练习试错优先' })[value] || value
+  return ({ V: '视觉型', A: '听觉型', R: '阅读书写型', K: '动觉实操型' })[value] || value
+}
+
+function loadLabel(value) {
+  return ({ low: '低', medium: '中', high: '高' })[value] || '-'
 }
 
 function controlLabel(value) {

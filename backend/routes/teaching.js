@@ -91,6 +91,8 @@ router.get(
           (!req.query.type || question.type === req.query.type) &&
           (!req.query.difficulty ||
             question.difficulty === req.query.difficulty) &&
+          (!req.query.cognitiveLoadLevel ||
+            (question.cognitiveLoadLevel || question.taskComplexity) === req.query.cognitiveLoadLevel) &&
           (!req.query.reviewStatus ||
             question.reviewStatus === req.query.reviewStatus) &&
           (!req.query.knowledgePoint ||

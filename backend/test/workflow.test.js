@@ -88,6 +88,51 @@ test("authentication, role boundaries, forged identity and class isolation", asy
   expect(classes.data.every((item) => item.id === "class-one")).toBe(true);
 });
 
+test("question-bank papers can be viewed and safely removed without deleting historical assignments", async () => {
+  const paper = db.create("papers", {
+    id: "manual-paper-removal",
+    title: "题库组卷安全移除",
+    teacherId: "t-one",
+    classId: "class-one",
+    filePath: "",
+    fileType: "manual",
+    source: "question-bank",
+    status: "published",
+    questions: [],
+  });
+  const assignment = db.create("assignments", {
+    id: "manual-paper-assignment",
+    title: "保留的历史作业",
+    teacherId: "t-one",
+    classId: "class-one",
+    paperId: paper.id,
+    questionIds: [],
+    questionSnapshots: [],
+    status: "published",
+  });
+
+  const detail = await request(
+    "t-one",
+    "GET",
+    "/api/teacher/papers/" + paper.id,
+  );
+  expect(detail.status).toBe(200);
+  expect(detail.data.questionDetails).toEqual([]);
+  expect(detail.data.usage.assignmentCount).toBe(1);
+
+  const removed = await request(
+    "t-one",
+    "DELETE",
+    "/api/teacher/papers/" + paper.id,
+  );
+  expect(removed.status).toBe(200);
+  expect(removed.data.archivedAt).toBeTruthy();
+  expect(db.data.assignments.some((item) => item.id === assignment.id)).toBe(true);
+
+  const list = await request("t-one", "GET", "/api/teacher/papers?pageSize=100");
+  expect(list.data.data.some((item) => item.id === paper.id)).toBe(false);
+});
+
 test("teacher question -> assignment -> student -> step review -> practice", async () => {
   const question = await request("t-one", "POST", "/api/teacher/questions", {
     type: "subjective",

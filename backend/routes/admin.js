@@ -5,6 +5,7 @@ const XLSX = require('xlsx');
 const bcrypt = require('bcryptjs');
 const db = require('../database/memory-db');
 const { ensureManualQuestionBank, getQuestionBankByNode } = require('../services/manual-question-bank');
+const { adaptiveOverview } = require('../services/adaptive-learning');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -43,7 +44,13 @@ function buildImportSummary(classes, students, users) {
 // 获取系统配置
 router.get('/settings', (req, res) => {
   try {
-    res.json({ success: true, data: db.data.settings });
+    res.json({
+      success: true,
+      data: {
+        ...db.data.settings,
+        adaptiveLearning: require('../services/adaptive-learning').getConfig()
+      }
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -57,24 +64,32 @@ router.put('/settings', (req, res) => {
     if (updates.adaptiveLearning) {
       const current = require('../services/adaptive-learning').getConfig();
       const input = updates.adaptiveLearning;
+      const numberOrCurrent = (value, fallback) => value === undefined ? fallback : Number(value);
       const adaptiveLearning = {
         ...current,
         enabled: input.enabled === undefined ? current.enabled : Boolean(input.enabled),
-        controlLowMax: Number(input.controlLowMax),
-        controlHighMin: Number(input.controlHighMin),
-        highEffortMin: Number(input.highEffortMin),
-        accuracyLowMax: Number(input.accuracyLowMax),
-        accuracyHighMin: Number(input.accuracyHighMin),
+        roundSize: 5,
+        varkValidityDays: 7,
+        mixedPreferenceGapMax: 0.5,
+        controlLowMax: numberOrCurrent(input.controlLowMax, current.controlLowMax),
+        controlHighMin: numberOrCurrent(input.controlHighMin, current.controlHighMin),
+        perceivedLoadLowMax: numberOrCurrent(input.perceivedLoadLowMax, current.perceivedLoadLowMax),
+        perceivedLoadHighMin: numberOrCurrent(input.perceivedLoadHighMin, current.perceivedLoadHighMin),
+        accuracyLowMax: numberOrCurrent(input.accuracyLowMax, current.accuracyLowMax),
+        accuracyHighMin: numberOrCurrent(input.accuracyHighMin, current.accuracyHighMin),
         ruleVersion: String(input.ruleVersion || current.ruleVersion).trim().slice(0, 60),
         enabledKnowledgePointIds: current.enabledKnowledgePointIds
       };
       if (
-        !Number.isFinite(adaptiveLearning.controlLowMax) || adaptiveLearning.controlLowMax < 1 ||
-        !Number.isFinite(adaptiveLearning.controlHighMin) || adaptiveLearning.controlHighMin > 5 ||
+        !Number.isFinite(adaptiveLearning.controlLowMax) || adaptiveLearning.controlLowMax < 2 ||
+        !Number.isFinite(adaptiveLearning.controlHighMin) || adaptiveLearning.controlHighMin > 10 ||
         adaptiveLearning.controlLowMax >= adaptiveLearning.controlHighMin
-      ) throw new Error('控制感阈值必须在 1—5 之间，且低阈值小于高阈值');
-      if (!Number.isFinite(adaptiveLearning.highEffortMin) || adaptiveLearning.highEffortMin < 1 || adaptiveLearning.highEffortMin > 5)
-        throw new Error('高心理努力阈值应为 1—5');
+      ) throw new Error('控制感总分阈值必须在 2—10 之间，且低阈值小于高阈值');
+      if (
+        !Number.isFinite(adaptiveLearning.perceivedLoadLowMax) || adaptiveLearning.perceivedLoadLowMax < 1 ||
+        !Number.isFinite(adaptiveLearning.perceivedLoadHighMin) || adaptiveLearning.perceivedLoadHighMin > 5 ||
+        adaptiveLearning.perceivedLoadLowMax >= adaptiveLearning.perceivedLoadHighMin
+      ) throw new Error('认知负荷阈值必须在 1—5 之间，且低阈值小于高阈值');
       if (
         !Number.isFinite(adaptiveLearning.accuracyLowMax) || adaptiveLearning.accuracyLowMax < 0 ||
         !Number.isFinite(adaptiveLearning.accuracyHighMin) || adaptiveLearning.accuracyHighMin > 1 ||
@@ -427,7 +442,14 @@ router.get('/users', (req, res) => {
     // 移除密码字段
     users = users.map(u => {
       const { password, ...userWithoutPassword } = u;
-      return userWithoutPassword;
+      const student = u.role === 'student'
+        ? db.findOne('students', { userId: u.id }) || db.findById('students', u.id)
+        : null;
+      return {
+        ...userWithoutPassword,
+        studentId: student?.id || null,
+        classId: student?.classId || null
+      };
     });
     
     const result = {
@@ -530,6 +552,39 @@ router.get('/statistics/overview', (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.get('/adaptation/overview', (req, res) => {
+  try {
+    const classIds = req.query.classId
+      ? [req.query.classId]
+      : db.find('classes').map(item => item.id);
+    res.json({ success: true, data: adaptiveOverview(classIds) });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+router.get('/adaptation/students/:studentId/history', (req, res) => {
+  try {
+    const student = db.findById('students', req.params.studentId);
+    if (!student) return res.status(404).json({ success: false, message: '学生不存在' });
+    res.json({
+      success: true,
+      data: {
+        student,
+        assessments: db.find('controlAssessments', { studentId: student.id })
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+        decisions: db.find('adaptationDecisions', { studentId: student.id })
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+        profile: db.findOne('learnerPresentationProfiles', { studentId: student.id, active: true }),
+        profiles: db.find('learnerPresentationProfiles', { studentId: student.id })
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+      }
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
   }
 });
 

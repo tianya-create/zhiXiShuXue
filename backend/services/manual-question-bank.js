@@ -7,7 +7,8 @@ const GRAPH_NODES = [
 ]
 
 // 版本化补种：已有本地数据升级后只补充新增目录节点的题，不覆盖教师题或学生记录。
-const QUESTION_BANK_VERSION = 2
+const QUESTION_BANK_VERSION = 4
+const ADAPTIVE_KNOWLEDGE_POINTS = new Set(['alg-1', 'alg-2', 'algebra-3', 'alg-3'])
 
 const TYPE_MAP = { 选择: 'choice', 填空: 'fill', 解答: 'shortAnswer' }
 const DIFF_MAP = { 1: 'easy', 2: 'easy', 3: 'medium', 4: 'hard', 5: 'hard' }
@@ -36,7 +37,9 @@ const QUESTION_BANK = {
   'algebra-3': [
     ['分式 x/3 的分母是（ ）', ['x', '3', 'x/3', '0'], '3', '分母不能为 0。', 1, '选择'],
     ['约分：6x/9=____。', [], '2x/3', '分子分母同除以 3。', 1, '填空'],
-    ['计算 1/x+2/x=____。', [], '3/x', '同分母分式分子相加。', 2, '填空']
+    ['计算 1/x+2/x=____。', [], '3/x', '同分母分式分子相加。', 2, '填空'],
+    ['当 x=2 时，分式 4/x 的值是____。', [], '2', '把 x=2 代入分式。', 2, '填空'],
+    ['分式 1/(x-3) 有意义时，x 不能等于（ ）', ['0', '1', '2', '3'], '3', '分母不能为 0。', 2, '选择']
   ],
   'algebra-4': [
     ['√12 可化简为（ ）', ['2√3', '3√2', '6', '√6'], '2√3', '12=4×3，√4=2。', 2, '选择'],
@@ -78,21 +81,24 @@ const QUESTION_BANK = {
     ['若 2a+3a=____', [], '5a', '同类项系数相加。', 1, '填空'],
     ['化简 2x+3y-x+y 的结果是（ ）', ['x+4y', 'x+2y', '2x+4y', '3x+y'], 'x+4y', '先合并同类项。', 2, '选择'],
     ['已知 a=2,b=-1，求 3a-2b。', [], '8', '代入后按运算顺序求值。', 3, '填空'],
-    ['说明合并同类项的依据。', [], '字母相同且相同字母的指数也相同的项叫同类项，合并时只把系数相加减。', '抓住“字母相同、指数相同”。', 4, '解答']
+    ['说明合并同类项的依据。', [], '字母相同且相同字母的指数也相同的项叫同类项，合并时只把系数相加减。', '抓住“字母相同、指数相同”。', 4, '解答'],
+    ['单项式 -4x² 的系数是____。', [], '-4', '单项式中的数字因数是系数。', 2, '填空']
   ],
   'alg-2': [
     ['计算 3x+2x 的结果是（ ）', ['5x', '6x', 'x', '5x²'], '5x', '同类项系数相加。', 1, '选择'],
     ['化简 7a-2a=____', [], '5a', '同类项相减。', 1, '填空'],
     ['化简 2(x+3)-x 的结果是（ ）', ['x+6', 'x+3', '2x+3', '3x+6'], 'x+6', '先去括号再合并。', 2, '选择'],
     ['化简 3(2y-1)-2(y+4)。', [], '4y-11', '注意去括号时符号变化。', 3, '填空'],
-    ['解答：化简 2(a-b)-3(2a+b) 的步骤。', [], '-4a-5b', '去括号、再合并同类项。', 4, '解答']
+    ['解答：化简 2(a-b)-3(2a+b) 的步骤。', [], '-4a-5b', '去括号、再合并同类项。', 4, '解答'],
+    ['化简 -2(x-3) 的结果是（ ）', ['-2x+6', '-2x-6', '2x+6', '2x-6'], '-2x+6', '负数乘括号内每一项。', 2, '选择']
   ],
   'alg-3': [
     ['方程 2x+3=7 的解是（ ）', ['1', '2', '3', '4'], '2', '移项后求解。', 1, '选择'],
     ['若 x-5=8，则 x=____', [], '13', '两边同时加 5。', 1, '填空'],
     ['方程 3x-6=0 的解是（ ）', ['1', '2', '3', '6'], '2', '先移项再除以系数。', 2, '选择'],
     ['解方程 5x+1=16。', [], '3', '等式两边同时减 1 再除 5。', 3, '填空'],
-    ['用方程解：一个数的 3 倍比它大 10，求这个数。', [], '5', '设未知数列方程。', 4, '解答']
+    ['用方程解：一个数的 3 倍比它大 10，求这个数。', [], '5', '设未知数列方程。', 4, '解答'],
+    ['方程 4x=20 的解是____。', [], '5', '等式两边同时除以 4。', 2, '填空']
   ],
   'alg-4': [
     ['方程组 x+y=5, x-y=1 的解为（ ）', ['x=3,y=2', 'x=2,y=3', 'x=1,y=4', 'x=4,y=1'], 'x=3,y=2', '联立求解。', 2, '选择'],
@@ -217,6 +223,7 @@ const QUESTION_BANK = {
 
 function buildQuestion(kpId, kpName, domain, index, row) {
   const [stem, options, answer, explanation, difficultyLevel, typeLabel] = row
+  const cognitiveLoadLevel = difficultyLevel <= 2 ? 'low' : difficultyLevel >= 4 ? 'high' : 'medium'
   return {
     id: `manual-${kpId}-${index + 1}`,
     content: stem,
@@ -231,6 +238,8 @@ function buildQuestion(kpId, kpName, domain, index, row) {
     domain,
     difficultyLevel,
     difficulty: DIFF_MAP[difficultyLevel],
+    cognitiveLoadLevel,
+    taskComplexity: cognitiveLoadLevel,
     questionTypeLabel: typeLabel,
     type: TYPE_MAP[typeLabel],
     // 平台内置题库经过人工整理，包含标准答案与解析；新建题目仍保持待审核。
@@ -248,6 +257,12 @@ function buildQuestion(kpId, kpName, domain, index, row) {
 function ensureManualQuestionBank() {
   if (Number(db.data.settings.questionBankVersion || 0) >= QUESTION_BANK_VERSION) return
   const all = db.find('questions')
+  for (const question of all) {
+    if (!ADAPTIVE_KNOWLEDGE_POINTS.has(question.knowledgePointId) || question.cognitiveLoadLevel) continue
+    const level = Number(question.difficultyLevel) || ({ easy: 1, medium: 3, hard: 5 }[question.difficulty] || 3)
+    const cognitiveLoadLevel = level <= 2 ? 'low' : level >= 4 ? 'high' : 'medium'
+    db.updateById('questions', question.id, { cognitiveLoadLevel, taskComplexity: cognitiveLoadLevel })
+  }
   const existingIds = new Set(all.map(item => item.id))
   GRAPH_NODES.forEach(([kpId, kpName, domain]) => {
     const rows = QUESTION_BANK[kpId] || []

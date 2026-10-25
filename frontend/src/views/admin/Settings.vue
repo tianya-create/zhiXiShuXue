@@ -64,9 +64,12 @@
       <el-alert title="仅作用于整式、整式加减、分式与分式运算、一元一次方程。阈值修改会随规则版本写入每次决策记录。" type="info" :closable="false" style="margin-bottom: 18px" />
       <el-form :model="adaptiveSettings" label-width="180px">
         <el-form-item label="启用双层适配"><el-switch v-model="adaptiveSettings.enabled" /></el-form-item>
-        <el-form-item label="控制感低阈值"><el-input-number v-model="adaptiveSettings.controlLowMax" :min="1" :max="4.9" :step="0.1" /></el-form-item>
-        <el-form-item label="控制感高阈值"><el-input-number v-model="adaptiveSettings.controlHighMin" :min="1.1" :max="5" :step="0.1" /></el-form-item>
-        <el-form-item label="高心理努力阈值"><el-input-number v-model="adaptiveSettings.highEffortMin" :min="1" :max="5" :step="1" /></el-form-item>
+        <el-form-item label="每轮题数"><el-input-number v-model="adaptiveSettings.roundSize" :min="5" :max="5" disabled /></el-form-item>
+        <el-form-item label="VARK 有效期"><el-input-number v-model="adaptiveSettings.varkValidityDays" :min="7" :max="7" disabled /><span style="margin-left:10px">天</span></el-form-item>
+        <el-form-item label="控制感低阈值（总分）"><el-input-number v-model="adaptiveSettings.controlLowMax" :min="2" :max="9" :step="1" /></el-form-item>
+        <el-form-item label="控制感高阈值（总分）"><el-input-number v-model="adaptiveSettings.controlHighMin" :min="3" :max="10" :step="1" /></el-form-item>
+        <el-form-item label="主观负荷低阈值"><el-input-number v-model="adaptiveSettings.perceivedLoadLowMax" :min="1" :max="4" :step="1" /></el-form-item>
+        <el-form-item label="主观负荷高阈值"><el-input-number v-model="adaptiveSettings.perceivedLoadHighMin" :min="2" :max="5" :step="1" /></el-form-item>
         <el-form-item label="低正确率上界"><el-input-number v-model="adaptiveSettings.accuracyLowMax" :min="0" :max="0.99" :step="0.05" /></el-form-item>
         <el-form-item label="高正确率下界"><el-input-number v-model="adaptiveSettings.accuracyHighMin" :min="0.01" :max="1" :step="0.05" /></el-form-item>
         <el-form-item label="规则版本"><el-input v-model="adaptiveSettings.ruleVersion" maxlength="60" /></el-form-item>
@@ -90,12 +93,16 @@ var llmSettings = reactive({ llmApiKey: '', llmApiEndpoint: '' })
 var systemSettings = reactive({ systemName: '智析数学', maxUploadSize: 10, allowedFileTypes: [] })
 var adaptiveSettings = reactive({
   enabled: true,
-  controlLowMax: 2.4,
-  controlHighMin: 3.8,
-  highEffortMin: 4,
+  roundSize: 5,
+  varkValidityDays: 7,
+  mixedPreferenceGapMax: 0.5,
+  controlLowMax: 4,
+  controlHighMin: 8,
+  perceivedLoadLowMax: 2,
+  perceivedLoadHighMin: 4,
   accuracyLowMax: 0.6,
-  accuracyHighMin: 0.85,
-  ruleVersion: 'adaptive-v1.0'
+  accuracyHighMin: 0.8,
+  ruleVersion: 'adaptive-v2.0'
 })
 
 var fileTypesStr = ref('')

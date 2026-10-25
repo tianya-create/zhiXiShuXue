@@ -33,6 +33,9 @@
             :label="node.name"
             :value="node.id"
         /></el-select>
+        <el-select v-model="filters.cognitiveLoadLevel" placeholder="认知负荷" clearable style="width: 140px">
+          <el-option label="低负荷" value="low" /><el-option label="中负荷" value="medium" /><el-option label="高负荷" value="high" />
+        </el-select>
         <el-button
           @click="
             page = 1;
@@ -49,6 +52,7 @@
           show-overflow-tooltip
         />
         <el-table-column prop="knowledgeNodeName" label="知识点" width="140" />
+        <el-table-column label="认知负荷" width="100"><template #default="{ row }">{{ loadLabel(row.cognitiveLoadLevel || row.taskComplexity) }}</template></el-table-column>
         <el-table-column label="年级" width="90"
           ><template #default="{ row }">{{
             row.grade ? row.grade + "年级" : "待归类"
@@ -131,7 +135,7 @@
                 label="提高"
                 value="hard" /></el-select
           ></el-form-item>
-          <el-form-item label="任务复杂度（认知适配）"
+          <el-form-item label="认知负荷等级（认知适配）"
             ><el-select v-model="form.taskComplexity"
               ><el-option label="低：单一步骤、信息精简" value="low" /><el-option
                 label="中：常规综合程度"
@@ -227,7 +231,7 @@ const questions = ref([]),
   visible = ref(false),
   page = ref(1),
   total = ref(0);
-const filters = reactive({ keyword: "", reviewStatus: "", knowledgePoint: "" });
+const filters = reactive({ keyword: "", reviewStatus: "", knowledgePoint: "", cognitiveLoadLevel: "" });
 const form = reactive({}),
   optionsText = ref(""),
   acceptedText = ref(""),
@@ -249,6 +253,7 @@ const statusName = (status) =>
     : status === "withdrawn"
       ? "已下架"
       : "待审核";
+const loadLabel = (value) => ({ low: "低", medium: "中", high: "高" })[value] || "中";
 async function load() {
   loading.value = true;
   try {
@@ -319,6 +324,7 @@ async function save() {
   try {
     const payload = {
       ...form,
+      cognitiveLoadLevel: form.taskComplexity,
       options: form.type === "choice" ? lines(optionsText.value) : [],
       acceptedAnswers: lines(acceptedText.value),
       hints: lines(hintsText.value),

@@ -35,7 +35,7 @@
     <section v-for="item in items" :key="item.id" class="likert-item">
       <div class="question-line">
         <span>{{ item.text }}</span>
-        <small>{{ item.dimension === 'effort' ? '1=很轻松，5=非常费脑' : '1=很不符合，5=非常符合' }}</small>
+        <small>1=很不符合，5=非常符合</small>
       </div>
       <div class="likert-scale">
         <button
@@ -72,7 +72,7 @@ const emit = defineEmits(['update:modelValue', 'completed'])
 const items = [
   { id: 'controlItem1', dimension: 'control', text: '做完这组题，我有信心掌握刚才涉及的知识点。' },
   { id: 'controlItem2', dimension: 'control', text: '如果再遇到同类型的题，我觉得自己能够独立做出来。' },
-  { id: 'mentalEffort', dimension: 'effort', text: '刚才这组题，你在理解上花了多大的脑力？' }
+  { id: 'cognitiveLoadItem', dimension: 'load', text: '完成这组题时，我需要同时处理的信息很多，感觉比较费力。' }
 ]
 const emotions = [
   { value: 'tired', emoji: '😮‍💨', label: '有点累' },
@@ -82,18 +82,18 @@ const emotions = [
   { value: 'energized', emoji: '🤩', label: '想挑战' }
 ]
 const scaleLabels = ['很不符合', '不太符合', '一般', '比较符合', '非常符合']
-const form = reactive({ emotion: '', controlItem1: null, controlItem2: null, mentalEffort: null })
+const form = reactive({ emotion: '', controlItem1: null, controlItem2: null, cognitiveLoadItem: null })
 const submitting = ref(false)
-const complete = computed(() => Boolean(form.emotion && form.controlItem1 && form.controlItem2 && form.mentalEffort))
+const complete = computed(() => Boolean(form.emotion && form.controlItem1 && form.controlItem2 && form.cognitiveLoadItem))
 const validationHint = computed(() => complete.value ? '已完成全部选择' : '请完成所有选择后提交')
 
 watch(() => props.round?.id, () => {
-  Object.assign(form, { emotion: '', controlItem1: null, controlItem2: null, mentalEffort: null })
+  Object.assign(form, { emotion: '', controlItem1: null, controlItem2: null, cognitiveLoadItem: null })
 })
 
 function submit() {
   if (!complete.value) {
-    ElMessage.warning('请先完成感受和三个评分')
+    ElMessage.warning('请先完成感受和三道评分')
     return
   }
   if (!props.round?.id) return

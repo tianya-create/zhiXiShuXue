@@ -3,19 +3,22 @@ const { canonicalKnowledgeId } = require("./question-map");
 
 const DEFAULT_CONFIG = Object.freeze({
   enabled: true,
-  ruleVersion: "adaptive-v1.0",
-  controlLowMax: 2.4,
-  controlHighMin: 3.8,
-  highEffortMin: 4,
+  ruleVersion: "adaptive-v2.0",
+  roundSize: 5,
+  varkValidityDays: 7,
+  mixedPreferenceGapMax: 0.5,
+  controlLowMax: 4,
+  controlHighMin: 8,
+  perceivedLoadLowMax: 2,
+  perceivedLoadHighMin: 4,
   accuracyLowMax: 0.6,
-  accuracyHighMin: 0.85,
+  accuracyHighMin: 0.8,
   presentationCalibration: {
     minEvidenceRounds: 6,
     windowSize: 8,
     lowAccuracyMax: 0.6,
-    lowControlMax: 2.8,
-    highEffortMin: 4,
-    expansionScoreGapMax: 1,
+    lowControlMax: 4,
+    expansionScoreGapMax: 0.5,
   },
   enabledKnowledgePointIds: ["alg-1", "alg-2", "algebra-3", "alg-3"],
 });
@@ -27,9 +30,9 @@ const PREFERENCE_QUESTIONS = [
   ["V1", "V", "学习新数学知识点时，我喜欢看思维导图或示意图把关系“画出来”。"],
   ["V2", "V", "理解函数图像平移时，我更倾向于看图像动态变化的示意图。"],
   ["V3", "V", "整理错题时，我习惯在错题旁画个图来帮助理解。"],
-  ["A1", "A", "学习数学概念时，我更喜欢听老师或微课口头讲解一遍。"],
-  ["A2", "A", "遇到不会的题，我倾向于找人问，听别人讲一遍思路。"],
-  ["A3", "A", "在数学课上，我更容易记住老师反复强调的口头解释。"],
+  ["A1", "A", "学习数学概念时，我更喜欢听老师口头讲解思路。"],
+  ["A2", "A", "遇到不会的题，我更容易从语音旁白中听懂关键步骤。"],
+  ["A3", "A", "复习时，把解题思路说出来或听一遍讲解对我更有效。"],
   ["R1", "R", "复习时，我觉得重新整理一遍文字笔记和公式对我最有效。"],
   ["R2", "R", "自学新方法时，我喜欢找一篇文字教程从头读到尾。"],
   ["R3", "R", "记忆公式时，我通常会抄写几遍，边抄边看文字。"],
@@ -40,12 +43,21 @@ const PREFERENCE_QUESTIONS = [
 
 function getConfig() {
   const saved = db.settings.adaptiveLearning || {};
+  const legacy = !saved.ruleVersion || /^adaptive-v1\./.test(saved.ruleVersion);
+  const compatibleSaved = legacy
+    ? {
+        ...(saved.enabled === undefined ? {} : { enabled: saved.enabled }),
+        ...(Array.isArray(saved.enabledKnowledgePointIds)
+          ? { enabledKnowledgePointIds: saved.enabledKnowledgePointIds }
+          : {}),
+      }
+    : saved;
   return {
     ...DEFAULT_CONFIG,
-    ...saved,
+    ...compatibleSaved,
     presentationCalibration: {
       ...DEFAULT_CONFIG.presentationCalibration,
-      ...(saved.presentationCalibration || {}),
+      ...(!legacy ? saved.presentationCalibration || {} : {}),
     },
   };
 }
@@ -63,6 +75,7 @@ function isEnabledForKnowledgePoint(value) {
 }
 
 function complexityOf(question) {
+  if (COMPLEXITIES.includes(question?.cognitiveLoadLevel)) return question.cognitiveLoadLevel;
   if (COMPLEXITIES.includes(question?.taskComplexity)) return question.taskComplexity;
   const level = Number(question?.difficultyLevel) || { easy: 1, medium: 3, hard: 5 }[question?.difficulty] || 3;
   return level <= 2 ? "low" : level >= 4 ? "high" : "medium";
@@ -92,6 +105,20 @@ function createLearningRound({ student, sourceType, sourceRecord, questions, kno
     knowledgePointId || questions[0]?.knowledgePointId || questions[0]?.knowledgePoints?.[0],
   );
   if (!isEnabledForKnowledgePoint(kp)) return null;
+  const config = getConfig();
+  if (sourceType !== "practice") return null;
+  if (questions.length !== config.roundSize) {
+    const error = new Error(`一轮薄弱练习必须完整提交 ${config.roundSize} 道题`);
+    error.status = 422;
+    throw error;
+  }
+  if (questions.some((item) => normalizedKnowledgePointId(
+    item.knowledgePointId || item.knowledgePoints?.[0],
+  ) !== kp)) {
+    const error = new Error("一轮薄弱练习的题目必须属于同一知识点");
+    error.status = 422;
+    throw error;
+  }
   const existing = db.findOne("learningRounds", {
     studentId: student.id,
     sourceRecordId: sourceRecord.id,
@@ -113,7 +140,7 @@ function createLearningRound({ student, sourceType, sourceRecord, questions, kno
     ...performance,
     status: awaitingReview ? "pending_review" : "awaiting_reflection",
     reflectionRequired: !awaitingReview,
-    ruleVersion: getConfig().ruleVersion,
+    ruleVersion: config.ruleVersion,
   });
 }
 
@@ -139,19 +166,23 @@ function controlLevel(score, config = getConfig()) {
 
 function accuracyLevel(accuracy, config = getConfig()) {
   if (accuracy < config.accuracyLowMax) return "low";
-  if (accuracy >= config.accuracyHighMin) return "high";
+  if (accuracy > config.accuracyHighMin) return "high";
   return "medium";
 }
 
-function guidanceFor(level, effortHigh, accuracyBand) {
+function perceivedLoadLevel(score, config = getConfig()) {
+  if (score <= config.perceivedLoadLowMax) return "low";
+  if (score >= config.perceivedLoadHighMin) return "high";
+  return "medium";
+}
+
+function guidanceFor(level, accuracyBand) {
   if (level === "low") {
     return {
       tone: "supportive",
       title: "先把这一步走稳，我们慢慢来",
-      message: effortHigh
-        ? "刚才确实很费脑，这不代表你学不会。下一轮我会拆小步骤、减少干扰，先完成一个看得见的小目标。"
-        : "暂时没把握很正常。先按提示完成第一步，做对一小步也算进步，我会陪你把方法理清。",
-      emoji: effortHigh ? "🌧️" : "🌱",
+      message: "暂时没把握很正常。下一轮会拆成更小的步骤、减少页面干扰；先完成一个看得见的小目标，再慢慢把方法理清。",
+      emoji: "🌱",
     };
   }
   if (level === "high") {
@@ -181,58 +212,28 @@ function proposeDecision(round, assessment) {
   const config = getConfig();
   const control = controlLevel(assessment.controlScore, config);
   const accuracyBand = accuracyLevel(round.accuracy, config);
-  const effortHigh = assessment.mentalEffort >= config.highEffortMin;
   let adjustment = 0;
   let scaffoldLevel = "medium";
   let pageDensity = "standard";
   let strategy = "保持当前难度，继续观察表现与感受。";
 
-  if (accuracyBand === "low" && control === "low") {
-    if (assessment.mentalEffort <= 2) {
-      scaffoldLevel = "medium";
-      strategy = "暂不直接降级，先通过归因引导区分粗心、投入不足与真正的理解困难。";
-    } else {
-      adjustment = -1;
-      scaffoldLevel = "high";
-      pageDensity = "low";
-      strategy = "降低一级任务复杂度，拆分步骤并建立小成功。";
-    }
-  } else if (accuracyBand === "low" && control === "medium") {
-    adjustment = effortHigh ? -1 : 0;
-    scaffoldLevel = "high";
-    pageDensity = "low";
-    strategy = effortHigh ? "降低一级复杂度并减少信息密度。" : "维持难度，增加步骤支架。";
-  } else if (accuracyBand === "low" && control === "high") {
-    scaffoldLevel = "medium";
-    strategy = "维持难度，通过针对性反馈校准信心。";
-  } else if (accuracyBand === "medium" && control === "low") {
-    scaffoldLevel = "high";
-    pageDensity = "low";
-    strategy = "不降低知识目标，增加可控选择和步骤提示。";
-  } else if (accuracyBand === "medium" && control === "high") {
-    scaffoldLevel = effortHigh ? "medium" : "low";
-    strategy = "维持难度，鼓励解释方法并核对关键步骤。";
-  } else if (accuracyBand === "high" && control === "low") {
-    scaffoldLevel = "medium";
-    pageDensity = "low";
-    strategy = "保持知识难度，用成功证据增强把握感。";
-  } else if (accuracyBand === "high" && control !== "low") {
-    adjustment = effortHigh ? 0 : 1;
-    scaffoldLevel = control === "high" ? "low" : "medium";
-    strategy = effortHigh ? "正确率较高但投入较大，暂不升级。" : "满足挑战条件，准备变式与迁移任务。";
-  }
+  const load = assessment.perceivedLoadLevel;
 
-  let upgradePending = false;
-  if (adjustment === 1) {
-    const previous = db
-      .find("adaptationDecisions", { studentId: round.studentId })
-      .filter((item) => item.knowledgePointId === round.knowledgePointId && item.roundId !== round.id)
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
-    if (!previous?.upgradeEligible) {
-      adjustment = 0;
-      upgradePending = true;
-      strategy = "首次满足升级条件，本轮先保持难度；连续两轮稳定后再升级。";
-    }
+  // 低控制感且主观认知负荷高时强制降一级；否则按正确率决定升降。
+  if (control === "low" && load === "high") {
+    adjustment = -1;
+    scaffoldLevel = "high";
+    pageDensity = "low";
+    strategy = "推送低认知负荷的分步小题，精简题干并增加留白，先建立稳定的完成体验。";
+  } else if (accuracyBand === "low") {
+    adjustment = -1;
+    scaffoldLevel = "high";
+    pageDensity = "low";
+    strategy = "正确率低于 60%，下一轮降低一级复杂度并增加分步提示。";
+  } else if (accuracyBand === "high") {
+    adjustment = 1;
+    scaffoldLevel = "low";
+    strategy = "正确率高于 80%，下一轮推送同知识点变式并适度提升复杂度。";
   }
 
   const targetComplexity = shiftComplexity(round.taskComplexity, adjustment);
@@ -246,18 +247,18 @@ function proposeDecision(round, assessment) {
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
   return {
     controlLevel: control,
+    perceivedLoadLevel: load,
     accuracyLevel: accuracyBand,
-    effortLevel: effortHigh ? "high" : assessment.mentalEffort <= 2 ? "low" : "medium",
     difficultyAdjustment: adjustment,
     targetComplexity,
     scaffoldLevel,
     pageDensity,
     strategy,
-    upgradeEligible: accuracyBand === "high" && !effortHigh && control !== "low",
-    upgradePending,
+    upgradeEligible: accuracyBand === "high" && !(control === "low" && load === "high"),
+    upgradePending: false,
     supportAvailable:
       control === "low" && previousAssessment?.controlLevel === "low",
-    guidance: guidanceFor(control, effortHigh, accuracyBand),
+    guidance: guidanceFor(control, accuracyBand),
     ruleVersion: config.ruleVersion,
   };
 }
@@ -282,9 +283,9 @@ function submitReflection(studentId, roundId, input) {
   }
   const controlItem1 = validateLikert(input.controlItem1, "控制感第 1 题");
   const controlItem2 = validateLikert(input.controlItem2, "控制感第 2 题");
-  const mentalEffort = validateLikert(input.mentalEffort, "心理努力题");
+  const cognitiveLoadItem = validateLikert(input.cognitiveLoadItem, "认知负荷题");
   if (!EMOTIONS.includes(input.emotion)) throw new Error("请选择此刻的感受");
-  const controlScore = Number(((controlItem1 + controlItem2) / 2).toFixed(2));
+  const controlScore = controlItem1 + controlItem2;
   return db.transaction(() => {
     const assessment = db.create("controlAssessments", {
       studentId,
@@ -292,10 +293,11 @@ function submitReflection(studentId, roundId, input) {
       roundId,
       knowledgePointId: round.knowledgePointId,
       emotion: input.emotion,
-      answers: { controlItem1, controlItem2, mentalEffort },
+      answers: { controlItem1, controlItem2, cognitiveLoadItem },
       controlScore,
       controlLevel: controlLevel(controlScore),
-      mentalEffort,
+      perceivedLoadScore: cognitiveLoadItem,
+      perceivedLoadLevel: perceivedLoadLevel(cognitiveLoadItem),
       ruleVersion: getConfig().ruleVersion,
     });
     const decision = db.create("adaptationDecisions", {
@@ -333,7 +335,7 @@ function latestDecision(studentId, knowledgePointId) {
 
 function questionnaire() {
   return {
-    version: "presentation-preference-v1.0",
+    version: "vark-math-v2.0",
     scale: { min: 1, max: 5 },
     questions: PREFERENCE_QUESTIONS,
   };
@@ -351,13 +353,19 @@ function savePresentationProfile(studentId, classId, input) {
       return [dimension, Number(average.toFixed(2))];
     }),
   );
-  const ranked = Object.entries(scores).sort((a, b) => b[1] - a[1]);
-  const primaryDimensions = ranked
-    .filter(([, score]) => ranked[0][1] - score <= 0.5)
-    .map(([dimension]) => dimension);
+  const dimensionOrder = new Map(PREFERENCE_DIMENSIONS.map((item, index) => [item, index]));
+  const ranked = Object.entries(scores).sort((a, b) =>
+    b[1] - a[1] || dimensionOrder.get(a[0]) - dimensionOrder.get(b[0]),
+  );
+  const primaryDimensions = [ranked[0][0]];
+  if (ranked[0][1] - ranked[1][1] <= getConfig().mixedPreferenceGapMax) {
+    primaryDimensions.push(ranked[1][0]);
+  }
   const existing = db.findOne("learnerPresentationProfiles", { studentId, active: true });
-  if (existing) db.updateById("learnerPresentationProfiles", existing.id, { active: false });
-  return db.create("learnerPresentationProfiles", {
+  const completedAt = new Date();
+  const validUntil = new Date(completedAt);
+  validUntil.setDate(validUntil.getDate() + getConfig().varkValidityDays);
+  const profile = {
     studentId,
     classId,
     answers: normalized,
@@ -365,16 +373,22 @@ function savePresentationProfile(studentId, classId, input) {
     primaryDimensions,
     mixed: primaryDimensions.length > 1,
     active: true,
-    source: existing ? "retake" : "onboarding",
+    source: "practice-session",
     baselineScores: scores,
-    calibration: {
+    calibration: existing?.calibration || {
       status: "collecting",
       evidenceCount: 0,
       requiredEvidenceCount: getConfig().presentationCalibration.minEvidenceRounds,
       message: "系统会结合后续多轮学习表现，谨慎微调资源呈现方式。",
       lastReviewedAt: null,
     },
-    questionnaireVersion: "presentation-preference-v1.1",
+    questionnaireVersion: "vark-math-v2.0",
+    completedAt: completedAt.toISOString(),
+    validUntil: validUntil.toISOString(),
+  };
+  return db.transaction(() => {
+    if (existing) db.updateById("learnerPresentationProfiles", existing.id, { active: false });
+    return db.create("learnerPresentationProfiles", profile);
   });
 }
 
@@ -382,13 +396,21 @@ function presentationProfile(studentId) {
   return db.findOne("learnerPresentationProfiles", { studentId, active: true }) || null;
 }
 
+function isPresentationProfileDue(profile, now = new Date()) {
+  const expiresAt = profile?.validUntil ? new Date(profile.validUntil).getTime() : NaN;
+  return !profile ||
+    profile.questionnaireVersion !== "vark-math-v2.0" ||
+    !Number.isFinite(expiresAt) ||
+    expiresAt <= now.getTime();
+}
+
 function presentationMode(profile) {
   const order = profile?.primaryDimensions || [];
   const modeByDimension = {
     V: "visual",
-    A: "workedExample",
+    A: "aural",
     R: "readWrite",
-    K: "practice",
+    K: "kinesthetic",
   };
   return {
     primary: modeByDimension[order[0]] || "readWrite",
@@ -434,7 +456,7 @@ function recordPresentationLearningEvidence(round, assessment) {
       dimensions: [...(profile.primaryDimensions || [])],
       accuracy: Number(round.accuracy || 0),
       controlScore: assessment.controlScore,
-      mentalEffort: assessment.mentalEffort,
+      perceivedLoadScore: assessment.perceivedLoadScore,
       createdAt: new Date().toISOString(),
     });
   }
@@ -449,7 +471,6 @@ function recordPresentationLearningEvidence(round, assessment) {
     evidenceCount: evidence.length,
     averageAccuracy: average(evidence, "accuracy"),
     averageControl: average(evidence, "controlScore"),
-    averageEffort: average(evidence, "mentalEffort"),
   };
   const persistCalibration = (calibration, event) => {
     const updated = db.updateById("learnerPresentationProfiles", profile.id, { calibration });
@@ -467,8 +488,7 @@ function recordPresentationLearningEvidence(round, assessment) {
   }
 
   const weakRounds = evidence.filter((item) =>
-    item.accuracy < config.lowAccuracyMax ||
-    (item.controlScore <= config.lowControlMax && item.mentalEffort >= config.highEffortMin),
+    item.accuracy < config.lowAccuracyMax || item.controlScore <= config.lowControlMax,
   );
   const consistentlyWeak = weakRounds.length >= Math.ceil(evidence.length * 0.6);
   const candidate = !profile.mixed && consistentlyWeak
@@ -480,7 +500,7 @@ function recordPresentationLearningEvidence(round, assessment) {
       status: "expanded",
       ...metrics,
       requiredEvidenceCount: config.minEvidenceRounds,
-      message: "最近多轮学习投入较大，已在原有偏好基础上补充第二种资源通道；这不是能力判断，你可随时重新测评。",
+      message: "最近多轮学习表现仍不稳定，已在原有偏好基础上补充第二种资源通道；这不是能力判断，你可随时重新测评。",
       lastReviewedAt: new Date().toISOString(),
     };
     const updated = db.updateById("learnerPresentationProfiles", profile.id, {
@@ -534,6 +554,7 @@ function adaptiveOverview(classIds) {
   const count = (items, value) => items.filter((item) => item === value).length;
   const levels = [...latestByStudent.values()].map((item) => item.controlLevel);
   const preferences = profiles.flatMap((item) => item.primaryDimensions);
+  const perceivedLoads = [...latestByStudent.values()].map((item) => item.perceivedLoadLevel);
   return {
     studentCount: studentIds.length,
     assessedStudentCount: latestByStudent.size,
@@ -541,6 +562,11 @@ function adaptiveOverview(classIds) {
       low: count(levels, "low"),
       medium: count(levels, "medium"),
       high: count(levels, "high"),
+    },
+    perceivedLoadDistribution: {
+      low: count(perceivedLoads, "low"),
+      medium: count(perceivedLoads, "medium"),
+      high: count(perceivedLoads, "high"),
     },
     preferenceDistribution: Object.fromEntries(
       PREFERENCE_DIMENSIONS.map((dimension) => [dimension, count(preferences, dimension)]),
@@ -565,9 +591,11 @@ module.exports = {
   finalizePendingLearningRound,
   getConfig,
   isEnabledForKnowledgePoint,
+  isPresentationProfileDue,
   latestDecision,
   presentationMode,
   presentationProfile,
+  perceivedLoadLevel,
   questionnaire,
   recordPresentationLearningEvidence,
   savePresentationProfile,
