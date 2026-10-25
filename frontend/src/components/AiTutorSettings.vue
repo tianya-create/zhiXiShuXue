@@ -7,7 +7,7 @@
       <el-form-item label="开启小智"><el-switch v-model="form.aiTutorEnabled" /></el-form-item>
       <el-form-item label="接口地址"><el-input v-model="form.aiTutorApiEndpoint" :disabled="managedByEnv" placeholder="完整的 OpenAI 兼容 chat/completions 接口地址" /></el-form-item>
       <el-form-item label="模型名称"><el-input v-model="form.aiTutorModel" :disabled="managedByEnv" placeholder="服务商提供的模型名称" /></el-form-item>
-      <el-form-item label="API Key"><el-input v-model="form.aiTutorApiKey" :disabled="managedByEnv" type="password" show-password :placeholder="maskedKey ? '已配置，留空保留原密钥' : '请输入 API Key'" autocomplete="new-password" /></el-form-item>
+      <el-form-item label="接口密钥"><el-input v-model="form.aiTutorApiKey" :disabled="managedByEnv" type="password" show-password :placeholder="maskedKey ? '已配置，留空保留原密钥' : '请输入接口密钥'" autocomplete="new-password" /></el-form-item>
       <el-form-item>
         <el-button type="primary" :loading="busy === 'save'" :disabled="!!busy" @click="submit('save')">保存小智配置</el-button>
         <el-button :loading="busy === 'test'" :disabled="!!busy" @click="submit('test')">测试连接</el-button>
