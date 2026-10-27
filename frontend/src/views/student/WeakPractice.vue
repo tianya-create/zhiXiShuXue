@@ -250,10 +250,13 @@ async function loadRecommendations(refresh) {
   practiceMeta.mode = route.query.questionId || route.query.mode === 'wrong-redo' ? 'wrong-question' : 'weak-point'
   practiceMeta.title = practiceMeta.mode === 'wrong-question' ? '错题重做' : '薄弱补练'
 
-  if (route.query.questionId || route.query.questionIds || route.query.kpId || saved?.questionIds?.length) {
+  // 只有 URL 显式带来的题目才属于「错题重做 / 指定题目」；
+  // 本地或服务端草稿里的 questionIds 只用于恢复作答，绝不能当作请求参数，
+  // 否则从侧栏进入「薄弱补练」会被上一轮草稿劫持成「错题重做」。
+  if (route.query.questionId || route.query.questionIds || route.query.kpId) {
     api.get(`/student/practice/${practiceMeta.knowledgePointId || 'custom'}`, {
       questionId: route.query.questionId,
-      questionIds: route.query.questionIds || saved?.questionIds?.join(','),
+      questionIds: route.query.questionIds,
       mode: route.query.mode,
       adaptive: adaptiveSession ? 'true' : undefined
     }).then(res => {
