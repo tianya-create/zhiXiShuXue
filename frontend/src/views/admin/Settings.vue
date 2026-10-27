@@ -6,15 +6,15 @@
     </div>
 
     <el-row :gutter="20">
-      <el-col :span="12">
-        <el-card class="gradient-card">
+      <el-col :xs="24" :sm="24" :md="12">
+        <el-card class="gradient-card settings-card">
           <template #header>OCR 服务配置</template>
-          <el-form :model="ocrSettings" label-width="124px">
-            <el-form-item label="API Key">
-              <el-input v-model="ocrSettings.ocrApiKey" placeholder="请输入 OCR API Key" show-password />
+          <el-form :model="ocrSettings" label-width="112px" class="settings-form">
+            <el-form-item label="接口密钥">
+              <el-input v-model="ocrSettings.ocrApiKey" placeholder="请输入 OCR 接口密钥" show-password />
             </el-form-item>
-            <el-form-item label="API Secret">
-              <el-input v-model="ocrSettings.ocrApiSecret" placeholder="请输入 API Secret" show-password />
+            <el-form-item label="密钥口令">
+              <el-input v-model="ocrSettings.ocrApiSecret" placeholder="请输入密钥口令" show-password />
             </el-form-item>
             <el-form-item>
               <el-button type="primary" @click="saveOCRSettings">保存配置</el-button>
@@ -23,15 +23,15 @@
         </el-card>
       </el-col>
 
-      <el-col :span="12">
-        <el-card class="gradient-card">
+      <el-col :xs="24" :sm="24" :md="12">
+        <el-card class="gradient-card settings-card">
           <template #header>大模型服务配置</template>
-          <el-form :model="llmSettings" label-width="124px">
-            <el-form-item label="API Key">
-              <el-input v-model="llmSettings.llmApiKey" placeholder="请输入大模型 API Key" show-password />
+          <el-form :model="llmSettings" label-width="112px" class="settings-form">
+            <el-form-item label="接口密钥">
+              <el-input v-model="llmSettings.llmApiKey" placeholder="请输入大模型接口密钥" show-password />
             </el-form-item>
-            <el-form-item label="API Endpoint">
-              <el-input v-model="llmSettings.llmApiEndpoint" placeholder="请输入 API Endpoint" />
+            <el-form-item label="接口地址">
+              <el-input v-model="llmSettings.llmApiEndpoint" placeholder="请输入接口地址（OpenAI 兼容）" />
             </el-form-item>
             <el-form-item>
               <el-button type="primary" @click="saveLLMSettings">保存配置</el-button>
@@ -178,4 +178,16 @@ function saveAdaptiveSettings() {
 }
 
 </script>
+
+<style scoped>
+/* 标签单行显示：避免浏览器翻译插件在标签内追加译文时把文字逐个折行 */
+.admin-settings :deep(.el-form-item__label) {
+  white-space: nowrap;
+  overflow: visible;
+}
+/* 两张并列卡片等高 */
+.admin-settings .settings-card {
+  height: 100%;
+}
+</style>
 
