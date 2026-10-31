@@ -96,10 +96,10 @@ async function buildTestWorkbook() {
   styleTitle(sheet, "智析数学双层学情适配功能测试用例", "范围：VARK、五题轮次、轮后自评、两层适配、权限、持久化和教师端功能", "L");
   const headers = ["用例编号", "模块", "前置条件", "测试步骤", "预期结果", "优先级", "实际结果", "执行状态", "证据文件", "测试人", "执行日期", "备注"];
   sheet.getRange("A6:L6").values = [headers];
-  styleHeader(sheet.getRange("A6:L6"));
   const rows = testCases.map((r) => [...r, "", "未执行", "", "", "", ""]);
   sheet.getRange(`A7:L${6 + rows.length}`).values = rows;
   setBase(sheet, sheet.getRange(`A6:L${6 + rows.length}`));
+  styleHeader(sheet.getRange("A6:L6"));
   sheet.getRange(`A7:L${6 + rows.length}`).format.wrapText = true;
   sheet.getRange(`A7:L${6 + rows.length}`).format.fill = "#FFFFFF";
   sheet.getRange(`A8:L${6 + rows.length}`).format.fill = pale;
@@ -129,12 +129,12 @@ async function buildTestWorkbook() {
     ["失败", null],
     ["阻塞", null],
   ];
-  styleHeader(stats.getRange("A6:B6"));
   stats.getRange("B8").formulas = [[`=COUNTIF('测试用例'!H7:H${6 + rows.length},"未执行")`]];
   stats.getRange("B9").formulas = [[`=COUNTIF('测试用例'!H7:H${6 + rows.length},"通过")`]];
   stats.getRange("B10").formulas = [[`=COUNTIF('测试用例'!H7:H${6 + rows.length},"失败")`]];
   stats.getRange("B11").formulas = [[`=COUNTIF('测试用例'!H7:H${6 + rows.length},"阻塞")`]];
   setBase(stats, stats.getRange("A6:B11"));
+  styleHeader(stats.getRange("A6:B6"));
   stats.getRange("A7:A11").format.fill = blue;
   stats.getRange("A6:B11").format.borders = { bottom: { color: line, style: "thin" } };
   stats.getRange("A6:A11").format.columnWidth = 24;
@@ -147,9 +147,9 @@ async function buildTestWorkbook() {
     ["3", "性能和浏览器截图必须来自真实运行", ""],
   ];
   stats.getRange("D6:F6").merge();
-  styleHeader(stats.getRange("D6:F6"));
   stats.getRange("E7:F9").merge(true);
   setBase(stats, stats.getRange("D6:F9"));
+  styleHeader(stats.getRange("D6:F6"));
   stats.getRange("D6:F9").format.wrapText = true;
   stats.getRange("D6:D9").format.columnWidth = 8;
   stats.getRange("E6:F9").format.columnWidth = 22;
@@ -174,9 +174,9 @@ async function buildBugWorkbook() {
   styleTitle(sheet, "智析数学双层学情适配 Bug 台账", "只登记实际发现并能够复现的缺陷，不预填虚拟问题", "T");
   const headers = ["缺陷编号", "发现日期", "模块", "发现版本", "环境", "缺陷摘要", "复现步骤", "预期结果", "实际结果", "严重程度", "优先级", "状态", "根因", "修复提交", "修复说明", "回归结果", "证据文件", "负责人", "关闭日期", "备注"];
   sheet.getRange("A6:T6").values = [headers];
-  styleHeader(sheet.getRange("A6:T6"));
   sheet.getRange(`A7:T${6 + bugs.length}`).values = bugs;
   setBase(sheet, sheet.getRange(`A6:T${6 + bugs.length}`));
+  styleHeader(sheet.getRange("A6:T6"));
   sheet.getRange(`A7:T${6 + bugs.length}`).format.wrapText = true;
   sheet.getRange(`A7:T${6 + bugs.length}`).format.fill = "#FFFFFF";
   sheet.getRange(`A8:T${6 + bugs.length}`).format.fill = pale;
@@ -199,11 +199,11 @@ async function buildBugWorkbook() {
   const stats = wb.worksheets.add("缺陷统计");
   styleTitle(stats, "缺陷统计", "状态由Bug台账自动汇总", "F");
   stats.getRange("A6:B12").values = [["指标", "数量"], ["缺陷总数", bugs.length], ["新建", null], ["处理中", null], ["已修复待回归", null], ["已关闭", null], ["延期", null]];
-  styleHeader(stats.getRange("A6:B6"));
   ["新建", "处理中", "已修复待回归", "已关闭", "延期"].forEach((status, i) => {
     stats.getRange(`B${8 + i}`).formulas = [[`=COUNTIF('Bug台账'!L7:L${6 + bugs.length},"${status}")`]];
   });
   setBase(stats, stats.getRange("A6:B12"));
+  styleHeader(stats.getRange("A6:B6"));
   stats.getRange("A7:A12").format.fill = blue;
   stats.getRange("A6:B12").format.borders = { bottom: { color: line, style: "thin" } };
   stats.getRange("A6:A12").format.columnWidth = 24;

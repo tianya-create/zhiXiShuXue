@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智析数学 · 内置环境接口耗时实测</title>
+  <style>
+    :root { color-scheme: light; font-family: "Microsoft YaHei", sans-serif; color: #182444; background: #edf3ff; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: linear-gradient(135deg,#edf3ff,#f9fbff 48%,#fff8e8); }
+    main { width: min(1180px, calc(100% - 40px)); margin: 28px auto; }
+    header, section { border: 1px solid #cfdbf5; border-radius: 18px; background: rgba(255,255,255,.96); box-shadow: 0 12px 34px rgba(47,74,139,.1); }
+    header { display: flex; justify-content: space-between; gap: 24px; align-items: center; padding: 24px 28px; }
+    h1 { margin: 0 0 8px; font-size: 28px; } h2 { margin: 0; font-size: 18px; }
+    p { margin: 5px 0; color: #5a698b; line-height: 1.6; }
+    button { border: 0; border-radius: 12px; padding: 13px 22px; color: white; background: #2a55f5; font-weight: 800; cursor: pointer; }
+    button:disabled { opacity: .55; cursor: wait; }
+    section { margin-top: 18px; padding: 22px 24px; }
+    .meta { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; margin: 18px 0 0; }
+    .meta div { padding: 12px 14px; border-radius: 12px; background: #f3f6ff; }
+    .meta b { display:block; margin-bottom:5px; color:#2a55f5; font-size:12px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 13px; }
+    th, td { padding: 11px 10px; border-bottom: 1px solid #e4eaf7; text-align: left; vertical-align: top; }
+    th { color: #44557d; background: #f4f7ff; }
+    td:nth-child(1), td:nth-child(4), td:nth-child(5) { white-space: nowrap; }
+    code { color: #263c72; font-family: Consolas, monospace; word-break: break-all; }
+    .ok { color: #16845b; font-weight: 800; } .bad { color: #d44747; font-weight: 800; }
+    .summary { display:flex; flex-wrap:wrap; gap:12px; margin-top:16px; }
+    .summary span { padding: 9px 13px; border-radius: 999px; background:#eef3ff; color:#344a7b; font-weight:700; }
+    .note { margin-top: 14px; padding: 11px 14px; border-left: 4px solid #f4b928; background: #fff9e8; color:#6d5a23; }
+    @media (max-width: 760px) { .meta { grid-template-columns: 1fr 1fr; } header { align-items:flex-start; flex-direction:column; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>智析数学 · 内置环境接口耗时实测</h1>
+      <p>由当前浏览器直接请求本地真实 API；耗时通过 <code>performance.now()</code> 计算。</p>
+    </div>
+    <button id="run">开始实测</button>
+  </header>
+  <section>
+    <h2>测试环境</h2>
+    <div class="meta">
+      <div><b>系统地址</b><span id="origin"></span></div>
+      <div><b>执行时间</b><span id="time">待执行</span></div>
+      <div><b>测试账号</b><span>student9 / teacher</span></div>
+      <div><b>取证方式</b><span>Codex 内置浏览器真实 HTTP 请求</span></div>
+    </div>
+  </section>
+  <section>
+    <h2>接口实测结果</h2>
+    <table>
+      <thead><tr><th>#</th><th>方法</th><th>接口</th><th>状态</th><th>耗时</th><th>说明</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="6">点击“开始实测”后生成真实结果。</td></tr></tbody>
+    </table>
+    <div class="summary" id="summary"></div>
+    <div class="note">说明：本页不是 F12 Network 面板，是用户确认接受的内置浏览器等效取证；所有状态码与耗时均来自本次实际请求。</div>
+  </section>
+</main>
+<script>
+  const rows = [];
+  let studentToken = '', teacherToken = '';
+  const tbody = document.getElementById('rows');
+  document.getElementById('origin').textContent = location.origin;
+  function paint() {
+    tbody.innerHTML = rows.map((r,i) => `<tr><td>${i+1}</td><td><b>${r.method}</b></td><td><code>${r.path}</code></td><td class="${r.ok?'ok':'bad'}">${r.status}</td><td><b>${r.ms.toFixed(1)} ms</b></td><td>${r.note||''}</td></tr>`).join('');
+    const good = rows.filter(r=>r.ok), values = good.map(r=>r.ms).sort((a,b)=>a-b);
+    const avg = values.length ? values.reduce((a,b)=>a+b,0)/values.length : 0;
+    const max = values.length ? Math.max(...values) : 0;
+    document.getElementById('summary').innerHTML = `<span>请求数：${rows.length}</span><span>成功：${good.length}</span><span>平均耗时：${avg.toFixed(1)} ms</span><span>最大耗时：${max.toFixed(1)} ms</span>`;
+  }
+  async function request(method,path,body,token,note) {
+    const start = performance.now(); let status = 'ERR', data = null, ok = false;
+    try {
+      const res = await fetch(path,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:body===undefined?undefined:JSON.stringify(body)});
+      status = res.status; ok = res.ok; data = await res.json().catch(()=>null);
+    } catch (e) { note = `${note||''} ${e.message}`.trim(); }
+    const ms = performance.now()-start; rows.push({method,path,status,ms,ok,note}); paint(); return data;
+  }
+  async function run() {
+    const btn=document.getElementById('run'); btn.disabled=true; btn.textContent='实测进行中…'; rows.length=0; paint();
+    document.getElementById('time').textContent = new Date().toLocaleString('zh-CN',{hour12:false});
+    try {
+      let login = await request('POST','/api/auth/login',{username:'student9',password:'student123'},'', '学生登录');
+      studentToken = login?.data?.token || '';
+      const questionnaire = await request('GET','/api/student/presentation-preference/questionnaire',undefined,studentToken,'VARK 问卷读取');
+      const questions = questionnaire?.data?.questions || [];
+      const prefAnswers = Object.fromEntries(questions.map((q,i)=>[q.id,i<3?5:2]));
+      await request('POST','/api/student/presentation-preference',{answers:prefAnswers},studentToken,'VARK 结果保存');
+      await request('GET','/api/student/adaptation/status',undefined,studentToken,'适配状态读取');
+      const practice = await request('GET','/api/student/practice/alg-1?adaptive=true',undefined,studentToken,'下一轮 5 题生成');
+      const list = practice?.data?.questions || [];
+      if (list.length === 5) {
+        const answers = Object.fromEntries(list.map(q=>[q.id,(q.options?.[0]?.value||q.options?.[0]?.key||q.options?.[0]?.label||q.options?.[0]||'x')]));
+        const submit = await request('POST','/api/student/practice/alg-1/submit',{answers,questionIds:list.map(q=>q.id),mode:'weak-point',title:'整式专项练习',adaptive:true,requestId:`perf-${Date.now()}`,costTime:30},studentToken,'一轮 5 题提交');
+        const roundId = submit?.data?.learningRound?.id;
+        if (roundId) {
+          await request('POST',`/api/student/learning-rounds/${roundId}/reflection`,{emotion:'steady',controlItem1:3,controlItem2:3,cognitiveLoadItem:3},studentToken,'轮后自评提交');
+          await request('GET',`/api/student/learning-rounds/${roundId}/feedback`,undefined,studentToken,'双层适配结果读取');
+        }
+      }
+      await request('GET','/api/student/adaptation/next/alg-1',undefined,studentToken,'下一轮适配方案读取');
+      login = await request('POST','/api/auth/login',{username:'teacher',password:'teacher123'},'', '教师登录');
+      teacherToken = login?.data?.token || '';
+      await request('GET','/api/teacher/adaptation/overview',undefined,teacherToken,'教师班级适配统计');
+      await request('GET','/api/teacher/adaptation/students/student-009/history',undefined,teacherToken,'教师端学生适配档案');
+      await request('GET','/api/teacher/analytics/student/student-009',undefined,teacherToken,'学生综合学情数据');
+    } finally { btn.disabled=false; btn.textContent='重新实测'; paint(); }
+  }
+  document.getElementById('run').addEventListener('click',run);
+</script>
+</body>
+</html>

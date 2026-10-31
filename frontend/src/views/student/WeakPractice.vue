@@ -126,6 +126,7 @@ const submitting = ref(false)
 const batchDialogVisible = ref(false)
 const reflectionVisible = ref(false)
 const preferenceDialogVisible = ref(false)
+const refreshAfterPreference = ref(false)
 const practiceReady = ref(false)
 const pendingRound = ref(null)
 const activeDecision = ref(null)
@@ -210,25 +211,19 @@ async function preparePracticeSession() {
     loadRecommendations(false)
     return
   }
-  if (!adaptationStatus.value) {
-    const response = await api.get('/student/adaptation/status')
-    adaptationStatus.value = response.data || {}
-  }
-  if (adaptationStatus.value.varkDue) {
-    preferenceDialogVisible.value = true
-    return
-  }
-  Object.assign(presentationMode, adaptationStatus.value.presentationMode || { primary: 'readWrite', secondary: null, mixed: false })
-  practiceReady.value = true
-  loadRecommendations(false)
+  // 每次开始白名单薄弱补练，都重新采集本次 VARK 偏好。
+  // 历史结果仅用于教师/管理端追踪，不再用于跳过问卷。
+  refreshAfterPreference.value = false
+  preferenceDialogVisible.value = true
 }
 
 function startPracticeAfterPreference(result) {
   preferenceDialogVisible.value = false
-  adaptationStatus.value = { ...(adaptationStatus.value || {}), varkDue: false, ...(result || {}) }
+  adaptationStatus.value = { ...(adaptationStatus.value || {}), varkDue: true, ...(result || {}) }
   Object.assign(presentationMode, result?.presentationMode || { primary: 'readWrite', secondary: null, mixed: false })
   practiceReady.value = true
-  loadRecommendations(false)
+  loadRecommendations(refreshAfterPreference.value)
+  refreshAfterPreference.value = false
 }
 
 function restartPracticeRound() {
@@ -236,7 +231,9 @@ function restartPracticeRound() {
     loadRecommendations(true)
     return
   }
-  loadRecommendations(true)
+  practiceReady.value = false
+  refreshAfterPreference.value = true
+  preferenceDialogVisible.value = true
 }
 
 async function loadRecommendations(refresh) {
@@ -376,14 +373,17 @@ watch(() => route.query.kpId, (value, oldValue) => {
 })
 
 onMounted(async () => {
+  let hasPendingReflection = false
   await api.get('/student/adaptation/status').then(res => {
     if (!res.success) return
     adaptationStatus.value = res.data || {}
     if (res.data.pendingRound?.reflectionRequired) {
       pendingRound.value = res.data.pendingRound
       reflectionVisible.value = true
+      hasPendingReflection = true
     }
   }).catch(() => {})
+  if (hasPendingReflection) return
   await preparePracticeSession()
 })
 </script>

@@ -183,7 +183,7 @@ function initializeData() {
       enabled: true,
       ruleVersion: 'adaptive-v2.0',
       roundSize: 5,
-      varkValidityDays: 7,
+      varkTriggerMode: 'every-practice',
       mixedPreferenceGapMax: 0.5,
       controlLowMax: 4,
       controlHighMin: 8,

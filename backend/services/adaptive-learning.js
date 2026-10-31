@@ -5,7 +5,7 @@ const DEFAULT_CONFIG = Object.freeze({
   enabled: true,
   ruleVersion: "adaptive-v2.0",
   roundSize: 5,
-  varkValidityDays: 7,
+  varkTriggerMode: "every-practice",
   mixedPreferenceGapMax: 0.5,
   controlLowMax: 4,
   controlHighMin: 8,
@@ -52,9 +52,10 @@ function getConfig() {
           : {}),
       }
     : saved;
+  const { varkValidityDays: _legacyVarkValidityDays, ...currentSaved } = compatibleSaved;
   return {
     ...DEFAULT_CONFIG,
-    ...compatibleSaved,
+    ...currentSaved,
     presentationCalibration: {
       ...DEFAULT_CONFIG.presentationCalibration,
       ...(!legacy ? saved.presentationCalibration || {} : {}),
@@ -335,7 +336,7 @@ function latestDecision(studentId, knowledgePointId) {
 
 function questionnaire() {
   return {
-    version: "vark-math-v2.0",
+    version: "vark-math-v2.1",
     scale: { min: 1, max: 5 },
     questions: PREFERENCE_QUESTIONS,
   };
@@ -363,8 +364,6 @@ function savePresentationProfile(studentId, classId, input) {
   }
   const existing = db.findOne("learnerPresentationProfiles", { studentId, active: true });
   const completedAt = new Date();
-  const validUntil = new Date(completedAt);
-  validUntil.setDate(validUntil.getDate() + getConfig().varkValidityDays);
   const profile = {
     studentId,
     classId,
@@ -382,9 +381,9 @@ function savePresentationProfile(studentId, classId, input) {
       message: "系统会结合后续多轮学习表现，谨慎微调资源呈现方式。",
       lastReviewedAt: null,
     },
-    questionnaireVersion: "vark-math-v2.0",
+    questionnaireVersion: "vark-math-v2.1",
     completedAt: completedAt.toISOString(),
-    validUntil: validUntil.toISOString(),
+    validUntil: null,
   };
   return db.transaction(() => {
     if (existing) db.updateById("learnerPresentationProfiles", existing.id, { active: false });
@@ -396,12 +395,10 @@ function presentationProfile(studentId) {
   return db.findOne("learnerPresentationProfiles", { studentId, active: true }) || null;
 }
 
-function isPresentationProfileDue(profile, now = new Date()) {
-  const expiresAt = profile?.validUntil ? new Date(profile.validUntil).getTime() : NaN;
-  return !profile ||
-    profile.questionnaireVersion !== "vark-math-v2.0" ||
-    !Number.isFinite(expiresAt) ||
-    expiresAt <= now.getTime();
+function isPresentationProfileDue(profile) {
+  // v2.1 起由每次薄弱补练会话强制触发问卷；这里仅判断是否存在
+  // 当前版本的可用结果，供本次问卷提交后的题目接口校验。
+  return !profile || profile.questionnaireVersion !== "vark-math-v2.1";
 }
 
 function presentationMode(profile) {

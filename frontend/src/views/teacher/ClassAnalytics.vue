@@ -4,6 +4,33 @@
       <h2>班级学情分析</h2>
       <p>全班的分数、层次和薄弱知识点。排在最上面的知识点，最值得在课堂上再讲一遍。</p>
     </div>
+
+    <el-card id="support-requests" class="gradient-card support-panel">
+      <template #header>
+        <div class="card-header">
+          <div>
+            <span class="support-title">学生主动求助</span>
+            <span class="support-subtitle">仅展示学生主动点击“我想和老师说说”后提交的记录</span>
+          </div>
+          <el-tag type="warning" effect="dark">待跟进 {{ openSupportCount }} 条</el-tag>
+        </div>
+      </template>
+      <el-table :data="supportRequests" empty-text="暂无学生主动求助">
+        <el-table-column prop="studentName" label="学生" width="110" />
+        <el-table-column label="知识点" width="150">
+          <template #default="scope">{{ knowledgePointText(scope.row.knowledgePointId) }}</template>
+        </el-table-column>
+        <el-table-column prop="message" label="学生留言" min-width="260" />
+        <el-table-column label="状态" width="100">
+          <template #default="scope">
+            <el-tag :type="supportStatusType(scope.row.status)">{{ supportStatusText(scope.row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="提交时间" width="170">
+          <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
+        </el-table-column>
+      </el-table>
+    </el-card>
     
     <el-row :gutter="20">
       <el-col :span="24">
@@ -11,7 +38,7 @@
           <template #header>
             <div class="card-header">
               <span>选择班级</span>
-              <el-select v-model="selectedClassId" placeholder="选择班级" @change="loadAnalytics" style="width: 200px;">
+              <el-select v-model="selectedClassId" placeholder="选择班级" @change="loadClassData" style="width: 200px;">
                 <el-option v-for="c in classes" :key="c.id" :label="c.name" :value="c.id" />
               </el-select>
             </div>
@@ -98,6 +125,7 @@ import { NB_CHART as CHART_COLORS, nbBrandGradient as brandGradient } from '@/ut
 var classes = ref([])
 var selectedClassId = ref('')
 var analytics = ref(null)
+var supportRequests = ref([])
 var levelChart = null
 var errorTypeChart = null
 var weakKnowledgeChart = null
@@ -107,6 +135,10 @@ var studentScores = computed(function() {
     return []
   }
   return analytics.value.studentScores
+})
+
+var openSupportCount = computed(function() {
+  return supportRequests.value.filter(function(item) { return item.status === 'open' }).length
 })
 
 var avgMastery = computed(function() {
@@ -144,12 +176,48 @@ function loadClasses() {
       classes.value = res.data
       if (res.data.length > 0) {
         selectedClassId.value = res.data[0].id
-        loadAnalytics()
+        loadClassData()
       }
     }
   }).catch(function(error) {
     console.error('加载班级失败:', error)
   })
+}
+
+function loadClassData() {
+  loadAnalytics()
+  loadSupportRequests()
+}
+
+function loadSupportRequests() {
+  if (!selectedClassId.value) return
+  api.get('/teacher/adaptation/support-requests?classId=' + encodeURIComponent(selectedClassId.value)).then(function(res) {
+    if (res.success) supportRequests.value = res.data || []
+  }).catch(function(error) {
+    console.error('加载学生主动求助失败:', error)
+  })
+}
+
+function knowledgePointText(id) {
+  var labels = { 'alg-1': '整式', 'alg-2': '分式', 'alg-3': '一元一次方程' }
+  return labels[id] || id || '-'
+}
+
+function supportStatusText(status) {
+  if (status === 'contacted') return '已联系'
+  if (status === 'closed') return '已完成'
+  return '待跟进'
+}
+
+function supportStatusType(status) {
+  if (status === 'closed') return 'success'
+  if (status === 'contacted') return 'primary'
+  return 'warning'
+}
+
+function formatTime(value) {
+  if (!value) return '-'
+  return new Date(value).toLocaleString('zh-CN', { hour12: false })
 }
 
 function loadAnalytics() {
@@ -275,6 +343,25 @@ function getLevelText(level) {
 </script>
 
 <style scoped>
+.support-panel {
+  margin-bottom: 20px;
+  border-top: 4px solid var(--nb-orange) !important;
+}
+
+.support-title {
+  display: block;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--nb-ink);
+}
+
+.support-subtitle {
+  display: block;
+  margin-top: 5px;
+  color: var(--nb-ink-3);
+  font-size: 13px;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;

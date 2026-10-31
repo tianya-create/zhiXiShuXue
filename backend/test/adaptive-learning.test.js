@@ -188,7 +188,8 @@ describe("多模态资源呈现偏好", () => {
       mixed: true,
     });
     expect(isPresentationProfileDue(profile)).toBe(false);
-    expect(isPresentationProfileDue({ ...profile, validUntil: "2020-01-01T00:00:00.000Z" })).toBe(true);
+    expect(profile.validUntil).toBeNull();
+    expect(isPresentationProfileDue({ ...profile, questionnaireVersion: "vark-math-v2.0" })).toBe(true);
   });
 
   test("三个维度并列时也只保留前两个偏好", () => {
@@ -200,6 +201,31 @@ describe("多模态资源呈现偏好", () => {
     };
     const profile = savePresentationProfile(student.id, student.classId, { answers });
     expect(profile.primaryDimensions).toEqual(["V", "A"]);
+  });
+
+  test("每次练习前重新测评会新增历史记录而不覆盖原始答卷", () => {
+    const firstAnswers = {
+      V1: 5, V2: 5, V3: 5,
+      A1: 2, A2: 2, A3: 2,
+      R1: 1, R2: 1, R3: 1,
+      K1: 1, K2: 1, K3: 1,
+    };
+    const secondAnswers = {
+      V1: 1, V2: 1, V3: 1,
+      A1: 1, A2: 1, A3: 1,
+      R1: 2, R2: 2, R3: 2,
+      K1: 5, K2: 5, K3: 5,
+    };
+    const first = savePresentationProfile(student.id, student.classId, { answers: firstAnswers });
+    const second = savePresentationProfile(student.id, student.classId, { answers: secondAnswers });
+    const history = db.find("learnerPresentationProfiles", { studentId: student.id });
+
+    expect(history).toHaveLength(2);
+    expect(db.findById("learnerPresentationProfiles", first.id).active).toBe(false);
+    expect(db.findById("learnerPresentationProfiles", first.id).answers).toEqual(firstAnswers);
+    expect(second.active).toBe(true);
+    expect(second.primaryDimensions).toEqual(["K"]);
+    expect(second.validUntil).toBeNull();
   });
 
   test("连续多轮低效时建议复测，不突破 0.5 分混合偏好边界", () => {

@@ -29,7 +29,6 @@ const studentProfile = (profile) => profile ? {
   primaryDimensions: profile.primaryDimensions,
   mixed: profile.mixed,
   completedAt: profile.completedAt,
-  validUntil: profile.validUntil,
   calibration: profile.calibration,
 } : null;
 const studentDecision = (decision) => decision ? {
@@ -55,8 +54,8 @@ router.get(
       success: true,
       data: {
         questionnaireCompleted: Boolean(profile) && !isPresentationProfileDue(profile),
-        varkDue: isPresentationProfileDue(profile),
-        varkValidityDays: getConfig().varkValidityDays,
+        varkDue: true,
+        varkTriggerMode: getConfig().varkTriggerMode,
         enabledKnowledgePointIds: getConfig().enabledKnowledgePointIds,
         presentationProfile: studentProfile(profile),
         presentationMode: presentationMode(profile),

@@ -445,7 +445,7 @@ router.get(
       : practiceQuestions(student, kp, req.query.adaptive === "true");
     const adaptationEnabled = !requested.length && req.query.adaptive === "true" && isEnabledForKnowledgePoint(kp);
     if (adaptationEnabled && isPresentationProfileDue(presentationProfile(student.id))) {
-      const error = new Error("请先完成本周学习偏好问卷，再开始薄弱练习");
+      const error = new Error("请先完成本次学习偏好问卷，再开始薄弱练习");
       error.status = 409;
       throw error;
     }
@@ -537,7 +537,7 @@ router.post(
     if (adaptivePractice) {
       const config = getConfig();
       if (isPresentationProfileDue(presentationProfile(student.id))) {
-        const error = new Error("学习偏好问卷已到复测时间，请完成问卷后再提交");
+        const error = new Error("请先完成本次学习偏好问卷，再提交本轮练习");
         error.status = 409;
         throw error;
       }

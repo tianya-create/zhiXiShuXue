@@ -65,7 +65,7 @@
       <el-form :model="adaptiveSettings" label-width="180px">
         <el-form-item label="启用双层适配"><el-switch v-model="adaptiveSettings.enabled" /></el-form-item>
         <el-form-item label="每轮题数"><el-input-number v-model="adaptiveSettings.roundSize" :min="5" :max="5" disabled /></el-form-item>
-        <el-form-item label="VARK 有效期"><el-input-number v-model="adaptiveSettings.varkValidityDays" :min="7" :max="7" disabled /><span style="margin-left:10px">天</span></el-form-item>
+        <el-form-item label="VARK 触发方式"><el-tag type="primary">每次进入薄弱补练前必测</el-tag></el-form-item>
         <el-form-item label="控制感低阈值（总分）"><el-input-number v-model="adaptiveSettings.controlLowMax" :min="2" :max="9" :step="1" /></el-form-item>
         <el-form-item label="控制感高阈值（总分）"><el-input-number v-model="adaptiveSettings.controlHighMin" :min="3" :max="10" :step="1" /></el-form-item>
         <el-form-item label="主观负荷低阈值"><el-input-number v-model="adaptiveSettings.perceivedLoadLowMax" :min="1" :max="4" :step="1" /></el-form-item>
@@ -94,7 +94,7 @@ var systemSettings = reactive({ systemName: '智析数学', maxUploadSize: 10, a
 var adaptiveSettings = reactive({
   enabled: true,
   roundSize: 5,
-  varkValidityDays: 7,
+  varkTriggerMode: 'every-practice',
   mixedPreferenceGapMax: 0.5,
   controlLowMax: 4,
   controlHighMin: 8,

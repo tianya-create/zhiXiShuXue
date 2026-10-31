@@ -8,7 +8,7 @@
     :show-close="false"
   >
     <section v-if="result" class="preference-result" aria-live="polite">
-      <span class="result-kicker">本周学习偏好结果</span>
+      <span class="result-kicker">本次学习偏好结果</span>
       <div class="result-main">
         <span class="result-icon">{{ currentPreference.icon }}</span>
         <div>
@@ -17,7 +17,7 @@
         </div>
       </div>
       <p v-if="secondaryPreference" class="mixed-note">本轮也会搭配 {{ secondaryPreference.icon }} {{ secondaryPreference.title }} 的资源形式。</p>
-      <p class="result-note">结果会保留 7 天。下面会按这个资源形式组织薄弱补练；题目难度仍由答题表现和之后的自评共同决定。</p>
+      <p class="result-note">下面会按本次结果组织薄弱补练；下次开始练习前会重新填写。题目难度仍由答题表现和之后的自评共同决定。</p>
       <div class="result-actions">
         <el-button @click="retake">重新填写</el-button>
         <el-button type="primary" size="large" @click="startPractice">开始本轮薄弱补练</el-button>

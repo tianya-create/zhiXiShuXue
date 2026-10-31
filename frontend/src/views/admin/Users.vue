@@ -137,7 +137,7 @@
         <div v-if="adaptationHistory.profile" class="adaptation-profile">
           <b>当前 VARK 偏好：</b>
           <el-tag v-for="item in adaptationHistory.profile.primaryDimensions" :key="item">{{ preferenceLabel(item) }}</el-tag>
-          <span>有效至 {{ formatDate(adaptationHistory.profile.validUntil) }}</span>
+          <span>最近测评 {{ formatDate(adaptationHistory.profile.completedAt) }}</span>
         </div>
         <el-empty v-if="!adaptationHistory.assessments.length" description="暂无轮后自评记录" :image-size="72" />
         <el-table v-else :data="adaptationHistory.assessments" max-height="420">

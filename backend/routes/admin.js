@@ -69,7 +69,7 @@ router.put('/settings', (req, res) => {
         ...current,
         enabled: input.enabled === undefined ? current.enabled : Boolean(input.enabled),
         roundSize: 5,
-        varkValidityDays: 7,
+        varkTriggerMode: 'every-practice',
         mixedPreferenceGapMax: 0.5,
         controlLowMax: numberOrCurrent(input.controlLowMax, current.controlLowMax),
         controlHighMin: numberOrCurrent(input.controlHighMin, current.controlHighMin),

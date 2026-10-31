@@ -46,7 +46,7 @@
           </div>
           <small>混合偏好会同时计入两个通道，不作为能力标签。</small>
         </div>
-        <button type="button" class="adaptive-card support-card" @click="goTo('/teacher/analytics/class')">
+        <button type="button" class="adaptive-card support-card" @click="goTo('/teacher/analytics/class?focus=support')">
           <strong>{{ adaptive.supportRequestCount }}</strong><b>条学生主动求助</b><small>只有学生主动点击后才会出现</small>
         </button>
       </div>
